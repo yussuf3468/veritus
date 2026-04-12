@@ -76,6 +76,173 @@ function parsePriority(message: string): "low" | "medium" | "high" | "urgent" {
   return "medium";
 }
 
+function normalizeWhitespace(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function cleanEntity(value?: string | null) {
+  if (!value) return undefined;
+
+  const cleaned = normalizeWhitespace(
+    value
+      .replace(/^[\s,:-]+/, "")
+      .replace(
+        /\b(?:today|yesterday|tonight|this morning|this afternoon|this evening|last night)\b.*$/i,
+        "",
+      )
+      .replace(/[.!?]+$/, "")
+      .replace(/^(?:my|a|an|the)\s+/i, ""),
+  );
+
+  return cleaned || undefined;
+}
+
+function toAmount(value: unknown) {
+  const amount =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value.replace(/,/g, ""))
+        : Number.NaN;
+
+  return Number.isFinite(amount) && amount > 0 ? amount : undefined;
+}
+
+function parseMoneyAmount(message: string) {
+  const match = message.match(/\$?\s*(\d[\d,]*(?:\.\d{1,2})?)/);
+  return toAmount(match?.[1]);
+}
+
+function formatMoneyAmount(amount: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+function inferIncomeCategory(message: string, source?: string) {
+  const text = `${message} ${source ?? ""}`.toLowerCase();
+
+  if (/salary|paycheck|wage|pay day/.test(text)) return "Salary";
+  if (/freelance|client|project|contract|invoice/.test(text)) {
+    return "Freelance";
+  }
+  if (/invest|dividend|interest|stock|crypto/.test(text)) {
+    return "Investment";
+  }
+  if (
+    /gift|friend|bonus|tip|refund|cashback|allowance|mom|dad|brother|sister/.test(
+      text,
+    )
+  ) {
+    return "Gift";
+  }
+
+  return "Other";
+}
+
+function inferExpenseCategory(message: string, target?: string) {
+  const text = `${message} ${target ?? ""}`.toLowerCase();
+
+  if (
+    /food|grocer|lunch|dinner|breakfast|coffee|restaurant|meal|snack/.test(text)
+  ) {
+    return "Food";
+  }
+  if (/transport|uber|taxi|fuel|gas|bus|train|parking|flight/.test(text)) {
+    return "Transport";
+  }
+  if (/housing|rent|mortgage|apartment|house/.test(text)) {
+    return "Housing";
+  }
+  if (/health|doctor|medicine|pharmacy|hospital|gym/.test(text)) {
+    return "Health";
+  }
+  if (/entertainment|movie|game|concert|netflix|spotify/.test(text)) {
+    return "Entertainment";
+  }
+  if (/shopping|clothes|amazon|mall|store/.test(text)) {
+    return "Shopping";
+  }
+  if (/education|course|book|tuition|school/.test(text)) {
+    return "Education";
+  }
+  if (/utilities|electric|water|internet|wifi|phone bill/.test(text)) {
+    return "Utilities";
+  }
+
+  return "Other";
+}
+
+function buildTransactionDescription(message: string, fallback?: string) {
+  const normalized = normalizeWhitespace(message);
+  if (fallback) return fallback;
+  if (normalized.length <= 180) return normalized;
+  return `${normalized.slice(0, 177).trimEnd()}...`;
+}
+
+function extractIncomeSource(message: string) {
+  const fromMatch = message.match(/\bfrom\s+(.+?)(?:[,.!?]|$)/i)?.[1];
+  if (fromMatch) return cleanEntity(fromMatch);
+
+  const paidMeMatch = message.match(
+    /\b([a-z][a-z\s'.-]{1,48}?)\s+(?:gave|paid)\s+me\b/i,
+  )?.[1];
+  return cleanEntity(paidMeMatch);
+}
+
+function extractExpenseTarget(message: string) {
+  const directMatch = message.match(
+    /\b(?:for|on|at|to)\s+(.+?)(?:[,.!?]|$)/i,
+  )?.[1];
+  if (directMatch) return cleanEntity(directMatch);
+
+  const purchaseMatch = message.match(
+    /\b(?:bought|purchased)\s+(.+?)\s+for\s+\$?\d[\d,]*(?:\.\d{1,2})?/i,
+  )?.[1];
+  return cleanEntity(purchaseMatch);
+}
+
+function createIncomeAction(
+  amount: number,
+  message: string,
+  options: { source?: string; description?: string } = {},
+) {
+  const source = cleanEntity(options.source);
+  const description =
+    cleanEntity(options.description) ??
+    buildTransactionDescription(message, source ? `From ${source}` : undefined);
+
+  return {
+    action: "log_income",
+    amount,
+    category: inferIncomeCategory(message, source),
+    description,
+    source: source ?? null,
+  };
+}
+
+function createExpenseAction(
+  amount: number,
+  message: string,
+  options: { target?: string; description?: string } = {},
+) {
+  const target = cleanEntity(options.target);
+  const description =
+    cleanEntity(options.description) ??
+    buildTransactionDescription(message, target ? `For ${target}` : undefined);
+
+  return {
+    action: "log_expense",
+    amount,
+    category: inferExpenseCategory(message, target),
+    description,
+    target: target ?? null,
+  };
+}
+
 function buildSummaryReply(ctx: AIContext) {
   const lines = ["Here is your current snapshot:"];
 
@@ -101,7 +268,9 @@ function buildSummaryReply(ctx: AIContext) {
     );
   }
 
-  lines.push("Start with the urgent task, then close one easy win to build momentum.");
+  lines.push(
+    "Start with the urgent task, then close one easy win to build momentum.",
+  );
 
   return lines.join(" ");
 }
@@ -115,7 +284,10 @@ function buildFocusReply(ctx: AIContext) {
     return `You do not have urgent tasks right now. Pick one high-leverage pending task, then use the rest of the session to finish a second smaller item.`;
   }
 
-  if ((ctx.habits?.total ?? 0) > 0 && (ctx.habits?.completedToday ?? 0) < (ctx.habits?.total ?? 0)) {
+  if (
+    (ctx.habits?.total ?? 0) > 0 &&
+    (ctx.habits?.completedToday ?? 0) < (ctx.habits?.total ?? 0)
+  ) {
     return "Your task list looks light, so the best focus is habit completion. Knock out the remaining daily habits while your momentum is clean.";
   }
 
@@ -135,42 +307,22 @@ function buildMoneyReply(ctx: AIContext) {
 }
 
 function inferAction(message: string): Record<string, unknown> | undefined {
+  const normalized = normalizeWhitespace(message);
+
   const taskMatch =
-    message.match(/(?:^|\b)(?:add|create)\s+task[:\s-]+(.+)/i) ??
-    message.match(/^task[:\s-]+(.+)/i);
+    normalized.match(/(?:^|\b)(?:add|create)\s+task[:\s-]+(.+)/i) ??
+    normalized.match(/^task[:\s-]+(.+)/i);
   if (taskMatch?.[1]) {
     return {
       action: "add_task",
       title: taskMatch[1].trim(),
-      priority: parsePriority(message),
+      priority: parsePriority(normalized),
     };
   }
 
-  const expenseMatch = message.match(
-    /(?:add|log)\s+(?:an?\s+)?expense(?:\s+of)?\s*\$?(\d+(?:\.\d{1,2})?)(?:\s+(?:for|on|in)\s+([a-zA-Z ]+))?(?:\s*[:-]\s*(.+))?/i,
+  const habitMatch = normalized.match(
+    /(?:^|\b)(?:add|create)\s+habit[:\s-]+(.+)/i,
   );
-  if (expenseMatch) {
-    return {
-      action: "log_expense",
-      amount: Number(expenseMatch[1]),
-      category: expenseMatch[2]?.trim() || "Other",
-      description: expenseMatch[3]?.trim() || null,
-    };
-  }
-
-  const incomeMatch = message.match(
-    /(?:add|log)\s+(?:an?\s+)?income(?:\s+of)?\s*\$?(\d+(?:\.\d{1,2})?)(?:\s+(?:for|from|in)\s+([a-zA-Z ]+))?(?:\s*[:-]\s*(.+))?/i,
-  );
-  if (incomeMatch) {
-    return {
-      action: "log_income",
-      amount: Number(incomeMatch[1]),
-      category: incomeMatch[2]?.trim() || "Other",
-      description: incomeMatch[3]?.trim() || null,
-    };
-  }
-
-  const habitMatch = message.match(/(?:^|\b)(?:add|create)\s+habit[:\s-]+(.+)/i);
   if (habitMatch?.[1]) {
     return {
       action: "add_habit",
@@ -178,22 +330,67 @@ function inferAction(message: string): Record<string, unknown> | undefined {
     };
   }
 
-  const goalMatch = message.match(/(?:^|\b)(?:add|create|set)\s+goal[:\s-]+(.+)/i);
+  const goalMatch = normalized.match(
+    /(?:^|\b)(?:add|create|set)\s+goal[:\s-]+(.+)/i,
+  );
   if (goalMatch?.[1]) {
     return {
       action: "add_goal",
       title: goalMatch[1].trim(),
-      type: /long/i.test(message) ? "long_term" : "short_term",
+      type: /long/i.test(normalized) ? "long_term" : "short_term",
     };
   }
 
-  const noteMatch = message.match(/(?:^|\b)(?:add|create|save)\s+note[:\s-]+(.+)/i);
+  const noteMatch = normalized.match(
+    /(?:^|\b)(?:add|create|save)\s+note[:\s-]+(.+)/i,
+  );
   if (noteMatch?.[1]) {
     return {
       action: "add_note",
       title: noteMatch[1].trim().slice(0, 60),
       content: noteMatch[1].trim(),
     };
+  }
+
+  const explicitExpenseMatch = normalized.match(
+    /(?:add|log)\s+(?:an?\s+)?expense(?:\s+of)?\s*\$?(\d+(?:\.\d{1,2})?)(?:\s+(?:for|on|in)\s+([a-zA-Z ]+))?(?:\s*[:-]\s*(.+))?/i,
+  );
+  if (explicitExpenseMatch) {
+    return createExpenseAction(Number(explicitExpenseMatch[1]), normalized, {
+      target: explicitExpenseMatch[2],
+      description: explicitExpenseMatch[3],
+    });
+  }
+
+  const explicitIncomeMatch = normalized.match(
+    /(?:add|log)\s+(?:an?\s+)?income(?:\s+of)?\s*\$?(\d+(?:\.\d{1,2})?)(?:\s+(?:for|from|in)\s+([a-zA-Z ]+))?(?:\s*[:-]\s*(.+))?/i,
+  );
+  if (explicitIncomeMatch) {
+    return createIncomeAction(Number(explicitIncomeMatch[1]), normalized, {
+      source: explicitIncomeMatch[2],
+      description: explicitIncomeMatch[3],
+    });
+  }
+
+  const amount = parseMoneyAmount(normalized);
+  const incomeVerbMatch =
+    /\b(?:got|received|earned|made|won|collected|sold|got paid|was paid|paid me|gave me|refunded|reimbursed)\b/i.test(
+      normalized,
+    ) || /\b(?:salary|paycheck|bonus|tip|cashback)\b/i.test(normalized);
+  const expenseVerbMatch =
+    /\b(?:spent|paid|bought|purchased|cost me|used|sent)\b/i.test(normalized) ||
+    /\b(?:expense|bill|rent|fare)\b/i.test(normalized);
+
+  if (amount && expenseVerbMatch && !incomeVerbMatch) {
+    return createExpenseAction(amount, normalized, {
+      target: extractExpenseTarget(normalized),
+    });
+  }
+
+  if (amount && incomeVerbMatch) {
+    return createIncomeAction(amount, normalized, {
+      source: extractIncomeSource(normalized),
+    });
   }
 
   return undefined;
@@ -216,10 +413,30 @@ function buildActionReply(action: Record<string, unknown>) {
   switch (action.action) {
     case "add_task":
       return `Adding **${String(action.title ?? "Untitled task")}** to your task list now.`;
-    case "log_expense":
-      return `Logging that expense now so your money view stays current.`;
-    case "log_income":
-      return `Logging that income now and updating your monthly balance.`;
+    case "log_expense": {
+      const amount = toAmount(action.amount);
+      const target = cleanEntity(
+        typeof action.target === "string"
+          ? action.target
+          : typeof action.category === "string"
+            ? action.category
+            : undefined,
+      );
+
+      return `Logged ${amount ? formatMoneyAmount(amount) : "that amount"} as an expense${target ? ` for ${target}` : ""}.`;
+    }
+    case "log_income": {
+      const amount = toAmount(action.amount);
+      const source = cleanEntity(
+        typeof action.source === "string"
+          ? action.source
+          : typeof action.category === "string"
+            ? action.category
+            : undefined,
+      );
+
+      return `Logged ${amount ? formatMoneyAmount(amount) : "that amount"} as income${source ? ` from ${source}` : ""}.`;
+    }
     case "add_habit":
       return `Adding **${String(action.name ?? "New habit")}** to your habit tracker now.`;
     case "add_goal":
@@ -261,7 +478,7 @@ export function localChat(
 
   return Promise.resolve({
     content:
-      "I can help with planning and quick actions right now. Try `summarize my day`, `what should I focus on?`, `add task: review budget`, or `log expense 45 for groceries`.",
+      "I can plan, summarize, and record real actions. Try `I got $100 from Ali`, `I spent $20 on groceries`, `summarize my day`, or `add task: review budget`.",
   });
 }
 
@@ -276,6 +493,8 @@ ${ctx.goals ? `Goals ${ctx.goals.active} active.` : ""}
 
 If the user asks you to perform an action, output a JSON object first with one of these actions:
 add_task, log_expense, log_income, add_habit, add_goal, add_note.
+
+Treat natural money statements as actions too. Example: "I got $100 from Ali" should become log_income. "I spent $20 on lunch" should become log_expense.
 
 Then give one short confirmation sentence. For normal questions, answer directly in under 120 words.`;
 }
@@ -304,7 +523,8 @@ export async function chat(
 
     const rawContent = response.choices[0]?.message?.content ?? "";
     const action = extractAction(rawContent);
-    const content = stripActionBlock(rawContent) ||
+    const content =
+      stripActionBlock(rawContent) ||
       (action ? buildActionReply(action) : "I am ready for your next move.");
 
     return { content, action };

@@ -11,9 +11,11 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const today = format(new Date(), "yyyy-MM-dd");
+  const now = new Date();
+
+  const today = format(now, "yyyy-MM-dd");
   const monthStart = `${today.slice(0, 7)}-01`;
-  const weekStart = format(subDays(new Date(), 7), "yyyy-MM-dd");
+  const weekStart = format(subDays(now, 7), "yyyy-MM-dd");
 
   const [
     tasks,
@@ -155,5 +157,17 @@ export default async function DashboardPage() {
     completedHabitIds: (completions.data ?? []).map((c) => c.habit_id),
   };
 
-  return <OverviewCards summary={summary} />;
+  return (
+    <OverviewCards
+      summary={summary}
+      snapshotDateLabel={format(now, "EEEE, MMMM d")}
+      dayPeriod={
+        now.getHours() < 12
+          ? "morning"
+          : now.getHours() < 17
+            ? "afternoon"
+            : "evening"
+      }
+    />
+  );
 }

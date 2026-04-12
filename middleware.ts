@@ -4,10 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const AUTH_PATHS = ["/login", "/register"];
 const PUBLIC_PATHS = ["/api/health"];
 
-function copyCookies(
-  source: NextResponse,
-  target: NextResponse,
-) {
+function copyCookies(source: NextResponse, target: NextResponse) {
   source.cookies.getAll().forEach((cookie) => {
     target.cookies.set(cookie.name, cookie.value, cookie);
   });

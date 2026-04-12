@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import "./globals.css";
@@ -9,7 +9,24 @@ export const metadata: Metadata = {
   title: { default: "Veritus", template: "%s | Veritus" },
   description: "Your Personal Life Operating System",
   keywords: ["productivity", "life os", "tasks", "habits", "finance"],
-  icons: { icon: "/favicon.ico" },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Veritus",
+  },
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/favicon.svg",
+    apple: "/apple-icon.svg",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#090C18",
 };
 
 export default function RootLayout({

@@ -86,14 +86,15 @@ export async function POST(request: NextRequest) {
 
   let aiResponse: Awaited<ReturnType<typeof chat>>;
   try {
-    aiResponse = !hasConfiguredModelProvider || useLocalFastPath
-      ? await localChat(parse.data.messages, ctx)
-      : await chat(parse.data.messages, ctx);
+    aiResponse =
+      !hasConfiguredModelProvider || useLocalFastPath
+        ? await localChat(parse.data.messages, ctx)
+        : await chat(parse.data.messages, ctx);
   } catch {
     aiResponse = await localChat(parse.data.messages, ctx);
   }
 
-  const { content, action } = aiResponse;
+  let { content, action } = aiResponse;
 
   const lastUserMsg = parse.data.messages.at(-1);
   const persistHistory = (async () => {
@@ -110,17 +111,24 @@ export async function POST(request: NextRequest) {
 
   // Execute action if AI returned one
   let actionResult: unknown = null;
+  let actionError: string | null = null;
   if (action?.action) {
     const [result] = await Promise.all([
       executeAction(supabase, user.id, action),
       persistHistory.catch(() => null),
     ]);
     actionResult = result;
+    if (!actionResult) {
+      actionError = "I understood that request, but I could not save it.";
+      content = `${content} ${actionError}`.trim();
+    }
   } else {
     void persistHistory.catch(() => null);
   }
 
-  return NextResponse.json({ data: { content, action, actionResult } });
+  return NextResponse.json({
+    data: { content, action, actionResult, actionError },
+  });
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

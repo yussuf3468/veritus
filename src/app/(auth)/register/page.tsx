@@ -58,7 +58,9 @@ export default function RegisterPage() {
         return;
       }
 
-      toast.success("Account created! Check your email to verify, then sign in.");
+      toast.success(
+        "Account created! Check your email to verify, then sign in.",
+      );
       window.location.assign("/login");
     }
   }

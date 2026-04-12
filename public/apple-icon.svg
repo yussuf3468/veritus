@@ -1,0 +1,17 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="180" height="180" rx="46" fill="#090C18"/>
+  <rect x="2" y="2" width="176" height="176" rx="44" stroke="url(#ring)" stroke-opacity="0.24" stroke-width="4"/>
+  <circle cx="54" cy="46" r="38" fill="#00D4FF" fill-opacity="0.18"/>
+  <circle cx="136" cy="138" r="46" fill="#7C3AED" fill-opacity="0.22"/>
+  <path d="M105.797 32L63 87.3302H86.319L74.0946 131L128.231 66.2064H101.284L105.797 32Z" fill="url(#bolt)"/>
+  <defs>
+    <linearGradient id="bolt" x1="63" y1="42" x2="132.623" y2="121.034" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00D4FF"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="18" y1="22" x2="160" y2="164" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00D4FF"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+</svg>

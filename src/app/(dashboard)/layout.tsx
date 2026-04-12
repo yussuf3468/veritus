@@ -22,22 +22,29 @@ export default async function DashboardLayout({
     .eq("id", user.id)
     .single();
 
-  return (
-    <div className="relative min-h-screen overflow-hidden bg-bg-primary">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,212,255,0.12),transparent_28%),radial-gradient(circle_at_top_right,rgba(124,58,237,0.16),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent_22%)]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[linear-gradient(180deg,rgba(0,212,255,0.07),transparent)]" />
+  const dateLabel = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  }).format(new Date());
 
-      <div className="relative flex min-h-screen">
+  return (
+    <div className="relative min-h-screen bg-bg-primary text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,212,255,0.08),transparent_24%),radial-gradient(circle_at_top_right,rgba(124,58,237,0.1),transparent_22%),radial-gradient(circle_at_bottom_left,rgba(34,197,94,0.04),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent_22%)]" />
+      <div className="pointer-events-none absolute inset-0 opacity-[0.04] [background-image:linear-gradient(rgba(255,255,255,0.8)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.8)_1px,transparent_1px)] [background-size:24px_24px] [mask-image:radial-gradient(circle_at_center,black,transparent_82%)]" />
+
+      <div className="relative mx-auto flex min-h-screen w-full max-w-[1520px] gap-3 px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 xl:px-5">
         <Sidebar />
 
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-w-0 flex-1 flex-col">
           <Header
             userEmail={user.email}
             userName={profile?.full_name ?? user.email?.split("@")[0]}
+            dateLabel={dateLabel}
           />
 
-          <main className="flex-1 overflow-y-auto px-4 pb-28 pt-4 sm:px-6 md:px-8 md:pb-8 md:pt-6">
-            <div className="mx-auto w-full max-w-7xl">{children}</div>
+          <main className="min-w-0 flex-1 pb-28 pt-3 md:pb-6 md:pt-4">
+            <div className="mx-auto w-full max-w-[1280px]">{children}</div>
           </main>
         </div>
       </div>

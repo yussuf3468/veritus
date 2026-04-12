@@ -46,7 +46,10 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   const parsed = SavingsGoalUpdateSchema.safeParse(payload);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return NextResponse.json(
+      { error: parsed.error.flatten() },
+      { status: 400 },
+    );
   }
 
   const { data, error } = await supabase
