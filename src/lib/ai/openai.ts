@@ -2,7 +2,7 @@ import OpenAI from "openai";
 
 const MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
-const MAX_MODEL_TOKENS = 220;
+const MAX_MODEL_TOKENS = 420;
 const HAS_MODEL_PROVIDER = Boolean(
   OPENAI_API_KEY && OPENAI_API_KEY !== "your-openai-api-key",
 );
@@ -18,6 +18,43 @@ export interface AIContext {
   habits?: { total: number; completedToday: number };
   goals?: { active: number };
   recentNotes?: string[];
+}
+
+export interface AISource {
+  title: string;
+  url: string;
+  snippet: string;
+  provider: string;
+}
+
+interface AIChatResult {
+  content: string;
+  action?: Record<string, unknown>;
+  sources?: AISource[];
+}
+
+interface DuckDuckGoTopic {
+  Text?: string;
+  FirstURL?: string;
+  Topics?: DuckDuckGoTopic[];
+}
+
+interface DuckDuckGoResponse {
+  Heading?: string;
+  AbstractText?: string;
+  AbstractURL?: string;
+  RelatedTopics?: DuckDuckGoTopic[];
+}
+
+interface WikipediaSearchItem {
+  title?: string;
+  snippet?: string;
+}
+
+interface WikipediaSearchResponse {
+  query?: {
+    search?: WikipediaSearchItem[];
+  };
 }
 
 function getOpenAIClient() {
@@ -306,6 +343,219 @@ function buildMoneyReply(ctx: AIContext) {
   return `You are currently negative by ${ctx.money.currency} ${Math.abs(ctx.money.balance).toFixed(2)} this month. Cut one low-value expense category this week and avoid adding new recurring costs.`;
 }
 
+function buildAdviceReply(message: string, ctx: AIContext) {
+  const normalized = message.toLowerCase();
+
+  if (/money|budget|spend|save|expense|income|finance/.test(normalized)) {
+    return buildMoneyReply(ctx);
+  }
+
+  if (/focus|priorit|next|plan|productive|task/.test(normalized)) {
+    return buildFocusReply(ctx);
+  }
+
+  const lines = [
+    "Here is the practical way to approach it:",
+    "Define the exact outcome you want before choosing a tactic.",
+    "List the main constraint, then pick the smallest next step that reduces uncertainty.",
+  ];
+
+  if (ctx.tasks?.urgent) {
+    lines.push(
+      `Do not ignore your ${ctx.tasks.urgent} urgent task${ctx.tasks.urgent === 1 ? "" : "s"} while deciding; clear that pressure first.`,
+    );
+  }
+
+  lines.push("If you want, I can turn that into a concrete plan or checklist.");
+  return lines.join(" ");
+}
+
+function stripHtmlTags(value: string) {
+  return value
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function flattenDuckDuckGoTopics(topics: DuckDuckGoTopic[] = []) {
+  return topics.flatMap((topic) =>
+    Array.isArray(topic.Topics) && topic.Topics.length > 0
+      ? flattenDuckDuckGoTopics(topic.Topics)
+      : [topic],
+  );
+}
+
+function dedupeSources(sources: AISource[]) {
+  const seen = new Set<string>();
+
+  return sources.filter((source) => {
+    if (!source.url || seen.has(source.url)) {
+      return false;
+    }
+
+    seen.add(source.url);
+    return true;
+  });
+}
+
+function cleanWebQuery(message: string) {
+  return normalizeWhitespace(
+    message
+      .replace(/^(?:can you|could you|would you|please)\s+/i, "")
+      .replace(
+        /^(?:search(?: the)?(?: web| internet| online)?|look ?up|lookup|research|google|browse|find(?: information| info)?(?: on| about)?|what's the latest on|what is the latest on)\s*/i,
+        "",
+      )
+      .replace(/\b(?:for me|on the internet|on the web|online)\b/gi, "")
+      .replace(/[?]+$/, ""),
+  );
+}
+
+function needsWebLookup(message: string) {
+  const normalized = message.toLowerCase();
+  if (!normalized) return false;
+
+  if (
+    /\b(search(?: the)?(?: web| internet| online)?|look ?up|lookup|research|google|browse|find(?: information| info)?(?: on| about)?)\b/.test(
+      normalized,
+    )
+  ) {
+    return true;
+  }
+
+  return /\b(latest|current|today|news|recent|this week|this month|live)\b/.test(
+    normalized,
+  );
+}
+
+async function searchDuckDuckGo(query: string): Promise<AISource[]> {
+  try {
+    const response = await fetch(
+      `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&no_redirect=1&skip_disambig=1`,
+      {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "VeritusAI/1.0",
+        },
+      },
+    );
+
+    if (!response.ok) return [];
+
+    const data = (await response.json()) as DuckDuckGoResponse;
+    const sources: AISource[] = [];
+
+    if (data.AbstractText && data.AbstractURL) {
+      sources.push({
+        title: data.Heading || query,
+        url: data.AbstractURL,
+        snippet: data.AbstractText,
+        provider: "DuckDuckGo",
+      });
+    }
+
+    for (const topic of flattenDuckDuckGoTopics(data.RelatedTopics).slice(
+      0,
+      3,
+    )) {
+      if (!topic.FirstURL || !topic.Text) continue;
+      sources.push({
+        title: stripHtmlTags(topic.Text).split(" - ")[0] || query,
+        url: topic.FirstURL,
+        snippet: stripHtmlTags(topic.Text),
+        provider: "DuckDuckGo",
+      });
+    }
+
+    return sources;
+  } catch {
+    return [];
+  }
+}
+
+async function searchWikipedia(query: string): Promise<AISource[]> {
+  try {
+    const response = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&utf8=1&format=json&srlimit=3`,
+      {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "VeritusAI/1.0",
+        },
+      },
+    );
+
+    if (!response.ok) return [];
+
+    const data = (await response.json()) as WikipediaSearchResponse;
+    const items = data.query?.search ?? [];
+
+    return items.slice(0, 3).flatMap((item) => {
+      const title = item.title?.trim();
+      if (!title) return [];
+
+      return [
+        {
+          title,
+          url: `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/\s+/g, "_"))}`,
+          snippet: stripHtmlTags(item.snippet ?? ""),
+          provider: "Wikipedia",
+        },
+      ];
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function lookupWeb(message: string): Promise<AISource[]> {
+  if (!message || inferAction(message) || !needsWebLookup(message)) {
+    return [];
+  }
+
+  const query = cleanWebQuery(message);
+  if (!query) return [];
+
+  const [duckDuckGoSources, wikipediaSources] = await Promise.all([
+    searchDuckDuckGo(query),
+    searchWikipedia(query),
+  ]);
+
+  return dedupeSources([...duckDuckGoSources, ...wikipediaSources]).slice(0, 4);
+}
+
+function buildWebReply(query: string, sources: AISource[]) {
+  if (sources.length === 0) {
+    return "I could not pull useful web results for that yet. Try a more specific query with names, dates, or the word latest.";
+  }
+
+  const [primary, ...rest] = sources;
+  const lead =
+    primary.snippet || `I found a relevant result from ${primary.provider}.`;
+  const followUp =
+    rest.length > 0
+      ? ` I also found ${rest
+          .slice(0, 2)
+          .map((source) => source.title)
+          .join(" and ")} for follow-up reading.`
+      : "";
+
+  return `I looked up "${cleanWebQuery(query) || query}". ${lead}${followUp} Open the sources below if you want the original pages.`;
+}
+
+function buildWebResearchPrompt(query: string, sources: AISource[]) {
+  if (sources.length === 0) return "";
+
+  return `Current web research for the user query "${query}":\n${sources
+    .map(
+      (source, index) =>
+        `${index + 1}. ${source.title}\nProvider: ${source.provider}\nURL: ${source.url}\nSnippet: ${source.snippet || "No snippet provided."}`,
+    )
+    .join(
+      "\n\n",
+    )}\n\nUse these results when answering. If the question depends on current or factual web information, ground the answer in these sources and do not invent details beyond them.`;
+}
+
 function inferAction(message: string): Record<string, unknown> | undefined {
   const normalized = normalizeWhitespace(message);
 
@@ -400,6 +650,10 @@ export function shouldUseLocalFastPath(messages: AIMessage[]) {
   const latestUserMessage = getLatestUserMessage(messages)?.trim() ?? "";
   if (!latestUserMessage) return true;
 
+  if (needsWebLookup(latestUserMessage)) {
+    return false;
+  }
+
   if (inferAction(latestUserMessage)) {
     return true;
   }
@@ -448,42 +702,66 @@ function buildActionReply(action: Record<string, unknown>) {
   }
 }
 
-export function localChat(
+export async function localChat(
   messages: AIMessage[],
   ctx: AIContext,
-): Promise<{ content: string; action?: Record<string, unknown> }> {
+  options: { sources?: AISource[] } = {},
+): Promise<AIChatResult> {
   const latestUserMessage = getLatestUserMessage(messages)?.trim() ?? "";
   const action = inferAction(latestUserMessage);
 
   if (action) {
-    return Promise.resolve({
+    return {
       content: buildActionReply(action),
       action,
-    });
+    };
   }
 
   const normalized = latestUserMessage.toLowerCase();
+  const sources = options.sources ?? (await lookupWeb(latestUserMessage));
+
+  if (sources.length > 0) {
+    return {
+      content: buildWebReply(latestUserMessage, sources),
+      sources,
+    };
+  }
 
   if (/summari[sz]e|my day|daily snapshot|daily summary/.test(normalized)) {
-    return Promise.resolve({ content: buildSummaryReply(ctx) });
+    return { content: buildSummaryReply(ctx) };
   }
 
   if (/focus|priorit|what should i do|what next/.test(normalized)) {
-    return Promise.resolve({ content: buildFocusReply(ctx) });
+    return { content: buildFocusReply(ctx) };
   }
 
   if (/spend|budget|money|finance|insight/.test(normalized)) {
-    return Promise.resolve({ content: buildMoneyReply(ctx) });
+    return { content: buildMoneyReply(ctx) };
   }
 
-  return Promise.resolve({
+  if (
+    /advice|how should i|what do you think|help me decide|should i\b|how can i/.test(
+      normalized,
+    )
+  ) {
+    return { content: buildAdviceReply(latestUserMessage, ctx) };
+  }
+
+  return {
     content:
-      "I can plan, summarize, and record real actions. Try `I got $100 from Ali`, `I spent $20 on groceries`, `summarize my day`, or `add task: review budget`.",
-  });
+      "I can advise, plan, summarize, search the web with sources, and record real actions. Try `look up the latest budgeting apps`, `I got $100 from Ali`, `summarize my day`, or `add task: review budget`.",
+  };
 }
 
 function buildSystemPrompt(ctx: AIContext): string {
-  return `You are Veritus AI. Be concise, practical, and action-oriented.
+  return `You are Veritus AI, a sharp personal strategist and research assistant. Be practical, accurate, and direct.
+
+Behavior:
+- Give concrete advice, tradeoffs, and next steps when the user asks for help deciding.
+- If current web research is provided, use it and stay grounded in it.
+- Never pretend to have current information unless web research was supplied.
+- Ask one clarifying question only when it prevents a wrong answer.
+- Keep answers compact, but use bullets if comparison or structure helps.
 
 Context:
 ${ctx.tasks ? `Tasks ${ctx.tasks.pending} pending, ${ctx.tasks.urgent} urgent.` : ""}
@@ -496,16 +774,18 @@ add_task, log_expense, log_income, add_habit, add_goal, add_note.
 
 Treat natural money statements as actions too. Example: "I got $100 from Ali" should become log_income. "I spent $20 on lunch" should become log_expense.
 
-Then give one short confirmation sentence. For normal questions, answer directly in under 120 words.`;
+Then give one short confirmation sentence. For normal questions, answer directly in under 180 words.`;
 }
 
 export async function chat(
   messages: AIMessage[],
   ctx: AIContext = {},
-): Promise<{ content: string; action?: Record<string, unknown> }> {
+): Promise<AIChatResult> {
+  const latestUserMessage = getLatestUserMessage(messages)?.trim() ?? "";
+  const sources = latestUserMessage ? await lookupWeb(latestUserMessage) : [];
   const openai = getOpenAIClient();
   if (!openai) {
-    return localChat(messages, ctx);
+    return localChat(messages, ctx, { sources });
   }
 
   const systemMsg: AIMessage = {
@@ -513,12 +793,23 @@ export async function chat(
     content: buildSystemPrompt(ctx),
   };
 
+  const webResearchMsg = sources.length
+    ? ({
+        role: "system",
+        content: buildWebResearchPrompt(latestUserMessage, sources),
+      } satisfies AIMessage)
+    : null;
+
   try {
     const response = await openai.chat.completions.create({
       model: MODEL,
-      messages: [systemMsg, ...messages],
+      messages: [
+        systemMsg,
+        ...(webResearchMsg ? [webResearchMsg] : []),
+        ...messages,
+      ],
       max_tokens: MAX_MODEL_TOKENS,
-      temperature: 0.4,
+      temperature: 0.45,
     });
 
     const rawContent = response.choices[0]?.message?.content ?? "";
@@ -527,9 +818,9 @@ export async function chat(
       stripActionBlock(rawContent) ||
       (action ? buildActionReply(action) : "I am ready for your next move.");
 
-    return { content, action };
+    return { content, action, sources };
   } catch {
-    return localChat(messages, ctx);
+    return localChat(messages, ctx, { sources });
   }
 }
 

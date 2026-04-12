@@ -12,6 +12,8 @@ import {
   BarChart3,
   Target,
   Trash2,
+  Globe,
+  ExternalLink,
 } from "lucide-react";
 import { useUIStore } from "@/store/ui";
 import { useMoneyStore } from "@/store/money";
@@ -29,6 +31,12 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   action?: { action?: string } & Record<string, unknown>;
+  sources?: Array<{
+    title: string;
+    url: string;
+    snippet: string;
+    provider: string;
+  }>;
 }
 
 const SUGGESTION_ITEMS: { text: string; Icon: React.ElementType }[] = [
@@ -36,6 +44,8 @@ const SUGGESTION_ITEMS: { text: string; Icon: React.ElementType }[] = [
   { text: "I spent $20 on groceries", Icon: ShoppingCart },
   { text: "Summarize my day", Icon: BarChart3 },
   { text: "What should I focus on?", Icon: Target },
+  { text: "Look up the latest budgeting apps", Icon: Globe },
+  { text: "Research current mortgage rates", Icon: Globe },
 ];
 
 const DEFAULT_MESSAGES: Message[] = [
@@ -43,7 +53,7 @@ const DEFAULT_MESSAGES: Message[] = [
     id: "welcome",
     role: "assistant",
     content:
-      'Hi! I\'m your Veritus AI. I can summarize your day, add tasks, and record real money activity from normal language. Try **"I got $100 from Ali"** or **"I spent $20 on groceries"**.',
+      'Hi! I\'m your Veritus AI. I can advise, summarize your day, search the web with sources, add tasks, and record real money activity from normal language. Try **"look up the latest budgeting apps"**, **"I got $100 from Ali"**, or **"What should I focus on?"**.',
   },
 ];
 const STORAGE_KEY = "veritus-ai-chat-v1";
@@ -260,6 +270,7 @@ export function AIChat() {
           action,
           actionResult,
           actionError,
+          sources,
         } = json.data;
 
         const assistantMsg: Message = {
@@ -267,6 +278,7 @@ export function AIChat() {
           role: "assistant",
           content: aiContent,
           action,
+          sources,
         };
 
         setMessages((prev) => [...prev, assistantMsg]);
@@ -496,6 +508,40 @@ export function AIChat() {
                               {badge}
                             </span>
                           ))}
+                        </div>
+                      )}
+                      {msg.sources && msg.sources.length > 0 && (
+                        <div className="space-y-2 px-0.5">
+                          <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">
+                            <Globe size={11} className="text-brand-cyan/70" />
+                            Sources
+                          </div>
+                          <div className="grid gap-2">
+                            {msg.sources.map((source) => (
+                              <a
+                                key={`${msg.id}-${source.url}`}
+                                href={source.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="group rounded-[16px] border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 transition-all hover:border-brand-cyan/20 hover:bg-brand-cyan/[0.04]"
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate text-[11px] font-medium text-slate-200 group-hover:text-white">
+                                      {source.title}
+                                    </div>
+                                    <div className="mt-1 line-clamp-2 text-[10px] leading-5 text-slate-500">
+                                      {source.snippet}
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-shrink-0 items-center gap-1 rounded-full border border-white/[0.06] bg-white/[0.03] px-1.5 py-1 text-[9px] uppercase tracking-[0.14em] text-slate-500">
+                                    {source.provider}
+                                    <ExternalLink size={10} />
+                                  </div>
+                                </div>
+                              </a>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>

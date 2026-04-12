@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
     aiResponse = await localChat(parse.data.messages, ctx);
   }
 
-  let { content, action } = aiResponse;
+  let { content, action, sources } = aiResponse;
 
   const lastUserMsg = parse.data.messages.at(-1);
   const persistHistory = (async () => {
@@ -104,7 +104,8 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         role: "assistant",
         content,
-        metadata: action ? { action } : null,
+        metadata:
+          action || (sources?.length ?? 0) > 0 ? { action, sources } : null,
       },
     ]);
   })();
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({
-    data: { content, action, actionResult, actionError },
+    data: { content, action, actionResult, actionError, sources },
   });
 }
 
