@@ -1,4 +1,4 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 export async function createClient() {
@@ -9,17 +9,17 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name) {
+        get(name: string) {
           return cookieStore.get(name)?.value;
         },
-        set(name, value, options) {
+        set(name: string, value: string, options?: CookieOptions) {
           try {
             cookieStore.set(name, value, options);
           } catch {
             // Cookie writes are not allowed in all server contexts.
           }
         },
-        remove(name, options) {
+        remove(name: string, options?: CookieOptions) {
           try {
             cookieStore.set(name, "", { ...options, maxAge: 0 });
           } catch {

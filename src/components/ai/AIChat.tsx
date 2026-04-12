@@ -12,7 +12,7 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  action?: Record<string, unknown>;
+  action?: { action?: string } & Record<string, unknown>;
 }
 
 const SUGGESTIONS = [

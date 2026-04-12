@@ -54,6 +54,7 @@ import {
 interface Props {
   initialTransactions?: Transaction[];
   initialSavingsGoals?: SavingsGoal[];
+  initialMonth?: string;
 }
 
 const EXPENSE_CATEGORIES = [
@@ -97,6 +98,7 @@ function fmt(n: number) {
 export function MoneyTracker({
   initialTransactions = [],
   initialSavingsGoals = [],
+  initialMonth,
 }: Props) {
   const {
     transactions,
@@ -145,6 +147,10 @@ export function MoneyTracker({
   }, [setTransactions, setSavingsGoals, setLoading]);
 
   useEffect(() => {
+    if (initialMonth) {
+      setMonthFilter(initialMonth);
+    }
+
     if (initialTransactions.length > 0) {
       setTransactions(initialTransactions);
       setSavingsGoals(initialSavingsGoals);

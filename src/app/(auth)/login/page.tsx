@@ -1,5 +1,5 @@
 "use client";
-import { useState, FormEvent } from "react";
+import { Suspense, useState, FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -7,7 +7,7 @@ import { Eye, EyeOff, Zap } from "lucide-react";
 import toast from "react-hot-toast";
 import { motion } from "framer-motion";
 
-export default function LoginPage() {
+function LoginPageContent() {
   const params = useSearchParams();
   const redirect = params.get("redirect") ?? "/dashboard";
   const supabase = createClient();
@@ -144,5 +144,32 @@ export default function LoginPage() {
         </p>
       </motion.div>
     </div>
+  );
+}
+
+function LoginPageFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-bg-primary p-4 relative overflow-hidden">
+      <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-brand-cyan/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-brand-purple/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="w-full max-w-md glass rounded-2xl p-8 relative">
+        <div className="h-6 w-32 skeleton mb-8" />
+        <div className="h-8 w-40 skeleton mb-2" />
+        <div className="h-4 w-48 skeleton mb-6" />
+        <div className="space-y-4">
+          <div className="h-14 skeleton" />
+          <div className="h-14 skeleton" />
+          <div className="h-11 skeleton" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginPageFallback />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

@@ -542,7 +542,7 @@ function TaskRow({
   onFocus,
   onEdit,
   dimmed,
-}: TVProps & { task: Task; dimmed?: boolean }) {
+}: Omit<TVProps, "tasks"> & { task: Task; dimmed?: boolean }) {
   const overdue = isOverdue(task);
   return (
     <motion.div
@@ -694,7 +694,6 @@ function KanbanView({ tasks, onCycle, onDelete, onFocus, onEdit }: TVProps) {
                     task={task}
                     onCycle={onCycle}
                     onDelete={onDelete}
-                    onFocus={onFocus}
                     onEdit={onEdit}
                   />
                 ))}
@@ -717,7 +716,7 @@ function KanbanCard({
   onCycle,
   onDelete,
   onEdit,
-}: TVProps & { task: Task }) {
+}: Omit<TVProps, "tasks" | "onFocus"> & { task: Task }) {
   const overdue = isOverdue(task);
   return (
     <motion.div

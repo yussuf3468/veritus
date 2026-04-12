@@ -1,4 +1,4 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const AUTH_PATHS = ["/login", "/register"];
@@ -21,15 +21,15 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name) {
+        get(name: string) {
           return request.cookies.get(name)?.value;
         },
-        set(name, value, options) {
+        set(name: string, value: string, options?: CookieOptions) {
           request.cookies.set(name, value);
           supabaseResponse = NextResponse.next({ request });
           supabaseResponse.cookies.set(name, value, options);
         },
-        remove(name, options) {
+        remove(name: string, options?: CookieOptions) {
           request.cookies.set(name, "");
           supabaseResponse = NextResponse.next({ request });
           supabaseResponse.cookies.set(name, "", { ...options, maxAge: 0 });

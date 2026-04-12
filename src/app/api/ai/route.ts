@@ -96,15 +96,17 @@ export async function POST(request: NextRequest) {
   const { content, action } = aiResponse;
 
   const lastUserMsg = parse.data.messages.at(-1);
-  const persistHistory = supabase.from("ai_chat_history").insert([
-    { user_id: user.id, role: "user", content: lastUserMsg?.content ?? "" },
-    {
-      user_id: user.id,
-      role: "assistant",
-      content,
-      metadata: action ? { action } : null,
-    },
-  ]);
+  const persistHistory = (async () => {
+    await supabase.from("ai_chat_history").insert([
+      { user_id: user.id, role: "user", content: lastUserMsg?.content ?? "" },
+      {
+        user_id: user.id,
+        role: "assistant",
+        content,
+        metadata: action ? { action } : null,
+      },
+    ]);
+  })();
 
   // Execute action if AI returned one
   let actionResult: unknown = null;
