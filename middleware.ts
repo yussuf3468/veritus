@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const AUTH_PATHS = ["/login", "/register"];
+const AUTH_PATHS = ["/login"];
 const PUBLIC_PATHS = ["/api/health"];
 
 function copyCookies(source: NextResponse, target: NextResponse) {
@@ -50,6 +50,14 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/favicon")
   ) {
     return supabaseResponse;
+  }
+
+  if (path === "/register") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    const redirectResponse = NextResponse.redirect(url);
+    copyCookies(supabaseResponse, redirectResponse);
+    return redirectResponse;
   }
 
   // Redirect authenticated users away from auth pages

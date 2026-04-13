@@ -377,7 +377,9 @@ function stripHtmlTags(value: string) {
     .trim();
 }
 
-function flattenDuckDuckGoTopics(topics: DuckDuckGoTopic[] = []) {
+function flattenDuckDuckGoTopics(
+  topics: DuckDuckGoTopic[] = [],
+): DuckDuckGoTopic[] {
   return topics.flatMap((topic) =>
     Array.isArray(topic.Topics) && topic.Topics.length > 0
       ? flattenDuckDuckGoTopics(topic.Topics)

@@ -12,6 +12,7 @@ interface MoneyState {
   removeTransaction: (id: string) => void;
   setSavingsGoals: (goals: SavingsGoal[]) => void;
   addSavingsGoal: (g: SavingsGoal) => void;
+  removeSavingsGoal: (id: string) => void;
   setMonthFilter: (m: string) => void;
   setLoading: (v: boolean) => void;
 
@@ -34,6 +35,8 @@ export const useMoneyStore = create<MoneyState>((set, get) => ({
     set((s) => ({ transactions: s.transactions.filter((t) => t.id !== id) })),
   setSavingsGoals: (savingsGoals) => set({ savingsGoals }),
   addSavingsGoal: (g) => set((s) => ({ savingsGoals: [g, ...s.savingsGoals] })),
+  removeSavingsGoal: (id) =>
+    set((s) => ({ savingsGoals: s.savingsGoals.filter((g) => g.id !== id) })),
   setMonthFilter: (monthFilter) => set({ monthFilter }),
   setLoading: (loading) => set({ loading }),
 

@@ -1,7 +1,6 @@
 "use client";
 import { Suspense, useState, FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Eye, EyeOff, Zap } from "lucide-react";
 import toast from "react-hot-toast";
@@ -76,8 +75,10 @@ function LoginPageContent() {
           <span className="text-xl font-bold text-gradient-cyan">VERITUS</span>
         </div>
 
-        <h1 className="text-2xl font-bold text-white mb-1">Welcome back</h1>
-        <p className="text-slate-400 text-sm mb-6">Sign in to your life OS</p>
+        <h1 className="text-2xl font-bold text-white mb-1">Yussuf Muse</h1>
+        <p className="text-slate-400 text-sm mb-6">
+          Private workspace access for your personal life OS
+        </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -135,12 +136,8 @@ function LoginPageContent() {
             {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>
-
         <p className="text-slate-500 text-sm text-center mt-6">
-          No account?{" "}
-          <Link href="/register" className="text-brand-cyan hover:underline">
-            Create one
-          </Link>
+          Sign-up is disabled for this private workspace.
         </p>
       </motion.div>
     </div>

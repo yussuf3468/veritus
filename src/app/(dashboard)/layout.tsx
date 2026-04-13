@@ -5,6 +5,8 @@ import { Header } from "@/components/layout/Header";
 import { MobileDock } from "@/components/layout/MobileDock";
 import { AIChat } from "@/components/ai/AIChat";
 
+const OWNER_NAME = "Yussuf Muse";
+
 export default async function DashboardLayout({
   children,
 }: {
@@ -28,6 +30,13 @@ export default async function DashboardLayout({
     day: "numeric",
   }).format(new Date());
 
+  const displayName =
+    profile?.full_name?.trim() ||
+    (typeof user.user_metadata?.full_name === "string"
+      ? user.user_metadata.full_name.trim()
+      : "") ||
+    OWNER_NAME;
+
   return (
     <div className="relative min-h-screen bg-bg-primary text-white">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,212,255,0.08),transparent_24%),radial-gradient(circle_at_top_right,rgba(124,58,237,0.1),transparent_22%),radial-gradient(circle_at_bottom_left,rgba(34,197,94,0.04),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent_22%)]" />
@@ -39,7 +48,7 @@ export default async function DashboardLayout({
         <div className="flex min-w-0 flex-1 flex-col">
           <Header
             userEmail={user.email}
-            userName={profile?.full_name ?? user.email?.split("@")[0]}
+            userName={displayName}
             dateLabel={dateLabel}
           />
 

@@ -151,10 +151,10 @@ export function Header({ userEmail, userName, dateLabel }: HeaderProps) {
 
               <div className="hidden min-w-0 sm:block">
                 <p className="max-w-[140px] truncate text-sm font-medium text-white">
-                  {userName ?? "User"}
+                  {userName ?? "Yussuf Muse"}
                 </p>
                 <p className="max-w-[160px] truncate text-[11px] text-slate-500">
-                  {userEmail ?? "Signed in"}
+                  {userEmail ?? "Private workspace"}
                 </p>
               </div>
 
