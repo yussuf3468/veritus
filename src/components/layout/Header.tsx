@@ -92,7 +92,7 @@ export function Header({ userEmail, userName, dateLabel }: HeaderProps) {
 
   return (
     <header
-      className="sticky z-30 flex-shrink-0"
+      className="z-30 flex-shrink-0 md:sticky"
       style={{ top: "calc(env(safe-area-inset-top) + 0.75rem)" }}
     >
       <div className="relative overflow-hidden rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,17,28,0.92),rgba(10,11,20,0.88))] shadow-[0_16px_44px_rgba(0,0,0,0.28)] backdrop-blur-xl">
