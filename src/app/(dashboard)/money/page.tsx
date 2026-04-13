@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { MoneyTracker } from "@/components/money/MoneyTracker";
+import { resolveCurrencyCode } from "@/lib/utils";
 import { endOfMonth, format, startOfMonth } from "date-fns";
 
 export const metadata: Metadata = { title: "Money · Veritus" };
@@ -41,7 +42,7 @@ export default async function MoneyPage() {
       initialTransactions={transactions ?? []}
       initialSavingsGoals={savingsGoals ?? []}
       initialMonth={month}
-      currency={profile?.currency ?? "USD"}
+      currency={resolveCurrencyCode(profile?.currency)}
     />
   );
 }

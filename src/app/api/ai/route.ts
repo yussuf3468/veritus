@@ -7,7 +7,7 @@ import {
   shouldUseLocalFastPath,
   type AIContext,
 } from "@/lib/ai/openai";
-import { checkRateLimit } from "@/lib/utils";
+import { checkRateLimit, resolveCurrencyCode } from "@/lib/utils";
 import { format } from "date-fns";
 
 export async function POST(request: NextRequest) {
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
           t.type === "income" ? a + Number(t.amount) : a - Number(t.amount),
         0,
       ),
-      currency: profile.data?.currency ?? "USD",
+      currency: resolveCurrencyCode(profile.data?.currency),
     },
     habits: {
       total: (habits.data ?? []).length,

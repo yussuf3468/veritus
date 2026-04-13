@@ -5,7 +5,6 @@ import {
   Plus,
   TrendingUp,
   TrendingDown,
-  DollarSign,
   PiggyBank,
   Trash2,
   ChevronLeft,
@@ -25,7 +24,13 @@ import { Modal } from "@/components/ui/Modal";
 import { Input, Select } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton, SkeletonList } from "@/components/ui/Skeleton";
-import { cn } from "@/lib/utils";
+import {
+  cn,
+  formatCurrency,
+  getCurrencyLabel,
+  getCurrencyLocale,
+  resolveCurrencyCode,
+} from "@/lib/utils";
 import toast from "react-hot-toast";
 import type { Transaction, SavingsGoal } from "@/types";
 import {
@@ -86,19 +91,11 @@ const COLORS = [
   "#ec4899",
 ];
 
-function fmt(n: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-  }).format(n);
-}
-
 export function MoneyTracker({
   initialTransactions = [],
   initialSavingsGoals = [],
   initialMonth,
-  currency = "USD",
+  currency = "KES",
 }: Props) {
   const {
     transactions,
@@ -126,20 +123,39 @@ export function MoneyTracker({
   const seededInitialRef = useRef(false);
   const skippedInitialRequestRef = useRef(false);
 
+  const resolvedCurrency = useMemo(
+    () => resolveCurrencyCode(currency),
+    [currency],
+  );
+  const currencyLocale = useMemo(
+    () => getCurrencyLocale(resolvedCurrency),
+    [resolvedCurrency],
+  );
+  const currencyLabel = useMemo(
+    () => getCurrencyLabel(resolvedCurrency),
+    [resolvedCurrency],
+  );
+
   const formatMoney = useCallback(
+    (value: number) => formatCurrency(value, resolvedCurrency),
+    [resolvedCurrency],
+  );
+
+  const formatCompactMoney = useCallback(
     (value: number) => {
       try {
-        return new Intl.NumberFormat("en-US", {
+        return new Intl.NumberFormat(currencyLocale, {
           style: "currency",
-          currency,
-          minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
-          maximumFractionDigits: 2,
+          currency: resolvedCurrency,
+          currencyDisplay: "narrowSymbol",
+          notation: "compact",
+          maximumFractionDigits: 1,
         }).format(value);
       } catch {
-        return fmt(value);
+        return formatMoney(value);
       }
     },
-    [currency],
+    [currencyLocale, formatMoney, resolvedCurrency],
   );
 
   const load = useCallback(
@@ -448,40 +464,40 @@ export function MoneyTracker({
     );
 
   return (
-    <div className="space-y-5 animate-fade-in">
-      <section className="relative overflow-hidden rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,32,0.96),rgba(9,10,18,0.94))] p-5 shadow-[0_28px_72px_rgba(0,0,0,0.34)] backdrop-blur-xl md:p-6">
+    <div className="space-y-4 animate-fade-in">
+      <section className="relative overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,32,0.96),rgba(9,10,18,0.94))] p-4 shadow-[0_24px_62px_rgba(0,0,0,0.3)] backdrop-blur-xl md:p-5">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,212,255,0.16),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(124,58,237,0.18),transparent_34%)]" />
-        <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+        <div className="relative flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl">
             <Badge
               variant="cyan"
-              className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.22em]"
+              className="rounded-full px-2.5 py-0.5 text-[9px] uppercase tracking-[0.18em]"
             >
               Money OS
             </Badge>
-            <h1 className="mt-3 text-2xl font-semibold text-white sm:text-[30px] sm:leading-[1.15]">
+            <h1 className="mt-2.5 text-[22px] font-semibold text-white sm:text-[26px] sm:leading-[1.15]">
               Financial command for {format(currentMonth, "MMMM")}
             </h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">
+            <p className="mt-1.5 max-w-xl text-[13px] leading-6 text-slate-400">
               {guidance.title} {guidance.body}
             </p>
 
-            <div className="mt-4 flex flex-wrap items-center gap-2.5">
+            <div className="mt-3.5 flex flex-wrap items-center gap-2">
               <div className="flex items-center rounded-full border border-white/8 bg-black/20 px-1 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
                 <button
                   onClick={prevMonth}
-                  className="rounded-full p-2 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+                  className="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
                   aria-label="Previous month"
                 >
                   <ChevronLeft size={16} />
                 </button>
-                <div className="flex items-center gap-2 px-3 text-sm font-medium text-white">
+                <div className="flex items-center gap-2 px-3 text-[13px] font-medium text-white">
                   <Landmark size={14} className="text-brand-cyan" />
                   {format(currentMonth, "MMMM yyyy")}
                 </div>
                 <button
                   onClick={nextMonth}
-                  className="rounded-full p-2 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+                  className="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
                   aria-label="Next month"
                 >
                   <ChevronRight size={16} />
@@ -501,10 +517,10 @@ export function MoneyTracker({
             </div>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 xl:w-[360px]">
+          <div className="grid gap-2 sm:grid-cols-2 xl:w-[320px]">
             <Button
               variant="primary"
-              size="lg"
+              size="md"
               className="justify-center"
               onClick={() => setShowTxModal(true)}
             >
@@ -512,7 +528,7 @@ export function MoneyTracker({
             </Button>
             <Button
               variant="secondary"
-              size="lg"
+              size="md"
               className="justify-center"
               onClick={() => setShowSgModal(true)}
             >
@@ -560,22 +576,22 @@ export function MoneyTracker({
           />
         </div>
 
-        <div className="relative mt-4 grid gap-3 lg:grid-cols-3">
+        <div className="relative mt-3.5 grid gap-3 lg:grid-cols-3">
           {insightCards.map((insight) => (
             <div
               key={insight.label}
-              className="rounded-[20px] border border-white/8 bg-white/[0.035] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+              className="rounded-[18px] border border-white/8 bg-white/[0.035] px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
             >
               <div className="flex items-center justify-between gap-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
                   {insight.label}
                 </p>
                 {insight.icon}
               </div>
-              <p className="mt-2 text-lg font-semibold text-white">
+              <p className="mt-1.5 text-base font-semibold text-white sm:text-lg">
                 {insight.value}
               </p>
-              <p className="mt-1 text-xs text-slate-500">{insight.note}</p>
+              <p className="mt-1 text-[11px] text-slate-500">{insight.note}</p>
             </div>
           ))}
         </div>
@@ -590,7 +606,7 @@ export function MoneyTracker({
           />
           <div className="p-5 pt-0">
             {trendData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={240}>
                 <AreaChart data={trendData}>
                   <defs>
                     <linearGradient
@@ -631,12 +647,10 @@ export function MoneyTracker({
                   />
                   <YAxis
                     tick={{ fontSize: 10, fill: "#64748b" }}
-                    tickFormatter={(value) =>
-                      formatMoney(value).replace(/\.00$/, "")
-                    }
+                    tickFormatter={(value) => formatCompactMoney(value)}
                     axisLine={false}
                     tickLine={false}
-                    width={72}
+                    width={74}
                   />
                   <Tooltip
                     contentStyle={{
@@ -688,7 +702,7 @@ export function MoneyTracker({
           <div className="p-5 pt-0">
             {pieBreakdown.length > 0 ? (
               <>
-                <ResponsiveContainer width="100%" height={220}>
+                <ResponsiveContainer width="100%" height={200}>
                   <PieChart>
                     <Pie
                       data={pieBreakdown}
@@ -789,11 +803,11 @@ export function MoneyTracker({
               {sortedTransactions.map((transaction) => (
                 <div
                   key={transaction.id}
-                  className="flex items-start gap-3 px-5 py-4"
+                  className="flex items-start gap-3 px-4 py-3.5"
                 >
                   <div
                     className={cn(
-                      "mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[14px] border",
+                      "mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[13px] border",
                       transaction.type === "income"
                         ? "border-brand-green/20 bg-brand-green/10"
                         : "border-red-400/20 bg-red-400/10",
@@ -830,7 +844,7 @@ export function MoneyTracker({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 pl-2">
+                  <div className="flex items-center gap-2 pl-1">
                     <p
                       className={cn(
                         "text-sm font-semibold tabular-nums",
@@ -921,7 +935,7 @@ export function MoneyTracker({
                 return (
                   <div
                     key={goal.id}
-                    className="rounded-[22px] border border-white/8 bg-white/[0.035] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                    className="rounded-[20px] border border-white/8 bg-white/[0.035] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -1013,7 +1027,7 @@ export function MoneyTracker({
         onCreated={(tx) => {
           addTransaction(tx);
         }}
-        currency={currency}
+        currency={currencyLabel}
       />
       <AddSavingsGoalModal
         open={showSgModal}
@@ -1021,14 +1035,14 @@ export function MoneyTracker({
         onCreated={(sg) => {
           addSavingsGoal(sg);
         }}
-        currency={currency}
+        currency={currencyLabel}
       />
       {showDepModal && (
         <DepositModal
           goal={showDepModal}
           onClose={() => setShowDepModal(null)}
           onSuccess={() => load(monthFilter)}
-          currency={currency}
+          currency={currencyLabel}
         />
       )}
     </div>
@@ -1036,7 +1050,7 @@ export function MoneyTracker({
 }
 
 const panelClass =
-  "relative overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,32,0.94),rgba(9,10,18,0.92))] shadow-[0_22px_58px_rgba(0,0,0,0.28)] backdrop-blur-xl";
+  "relative overflow-hidden rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,32,0.94),rgba(9,10,18,0.92))] shadow-[0_18px_48px_rgba(0,0,0,0.26)] backdrop-blur-xl";
 
 function MetricCard({
   icon,
@@ -1059,17 +1073,22 @@ function MetricCard({
   };
 
   return (
-    <div className="rounded-[22px] border border-white/8 bg-white/[0.035] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <div className="mb-2 flex items-center gap-1.5">
+    <div className="rounded-[18px] border border-white/8 bg-white/[0.035] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <div className="mb-1.5 flex items-center gap-1.5">
         {icon}
-        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
           {label}
         </p>
       </div>
-      <p className={cn("text-xl font-semibold tabular-nums", tones[tone])}>
+      <p
+        className={cn(
+          "text-lg font-semibold tabular-nums sm:text-xl",
+          tones[tone],
+        )}
+      >
         {value}
       </p>
-      <p className="mt-1 text-xs text-slate-500">{note}</p>
+      <p className="mt-1 text-[11px] text-slate-500">{note}</p>
     </div>
   );
 }
@@ -1086,13 +1105,13 @@ function SectionHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 p-5">
+    <div className="flex items-start justify-between gap-4 p-4">
       <div>
         <div className="flex items-center gap-2">
           {icon}
-          <p className="text-sm font-semibold text-white">{title}</p>
+          <p className="text-[13px] font-semibold text-white">{title}</p>
         </div>
-        <p className="mt-1 text-xs text-slate-500">{subtitle}</p>
+        <p className="mt-1 text-[11px] text-slate-500">{subtitle}</p>
       </div>
       {action}
     </div>
@@ -1109,12 +1128,14 @@ function EmptyPanel({
   copy: string;
 }) {
   return (
-    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-[22px] border border-dashed border-white/8 bg-white/[0.02] px-6 py-10 text-center">
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.03]">
+    <div className="flex min-h-[180px] flex-col items-center justify-center rounded-[20px] border border-dashed border-white/8 bg-white/[0.02] px-5 py-8 text-center">
+      <div className="flex h-10 w-10 items-center justify-center rounded-[18px] border border-white/8 bg-white/[0.03]">
         {icon}
       </div>
-      <p className="mt-4 text-sm font-medium text-white">{title}</p>
-      <p className="mt-1 max-w-sm text-sm leading-6 text-slate-500">{copy}</p>
+      <p className="mt-3 text-sm font-medium text-white">{title}</p>
+      <p className="mt-1 max-w-sm text-[13px] leading-6 text-slate-500">
+        {copy}
+      </p>
     </div>
   );
 }
@@ -1349,7 +1370,7 @@ function DepositModal({
       if (!res.ok) throw new Error("Failed");
       onSuccess();
       onClose();
-      toast.success(`Deposited $${amount}`);
+      toast.success("Deposit recorded");
     } catch {
       toast.error("Failed to deposit");
     } finally {

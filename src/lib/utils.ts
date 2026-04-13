@@ -6,10 +6,34 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(amount: number, currency = "USD"): string {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(
-    amount,
-  );
+export function resolveCurrencyCode(currency?: string | null): string {
+  const normalized = currency?.trim().toUpperCase();
+
+  if (!normalized || normalized === "USD" || normalized === "KSH") {
+    return "KES";
+  }
+
+  return normalized;
+}
+
+export function getCurrencyLocale(currency?: string | null): string {
+  return resolveCurrencyCode(currency) === "KES" ? "en-KE" : "en-US";
+}
+
+export function getCurrencyLabel(currency?: string | null): string {
+  const resolved = resolveCurrencyCode(currency);
+  return resolved === "KES" ? "KSh" : resolved;
+}
+
+export function formatCurrency(amount: number, currency = "KES"): string {
+  const resolvedCurrency = resolveCurrencyCode(currency);
+  return new Intl.NumberFormat(getCurrencyLocale(resolvedCurrency), {
+    style: "currency",
+    currency: resolvedCurrency,
+    currencyDisplay: "narrowSymbol",
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
 }
 
 export function formatDate(date: string | Date): string {

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { OverviewCards } from "@/components/dashboard/OverviewCards";
+import { resolveCurrencyCode } from "@/lib/utils";
 import { format, subDays } from "date-fns";
 
 export const metadata = { title: "Dashboard" };
@@ -91,7 +92,7 @@ export default async function DashboardPage() {
       .gte("date", weekStart),
   ]);
 
-  const currency = profile.data?.currency ?? "USD";
+  const currency = resolveCurrencyCode(profile.data?.currency);
 
   const learningHoursThisWeek =
     (learningSessions.data ?? []).reduce(
