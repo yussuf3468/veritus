@@ -161,7 +161,13 @@ export function Sidebar() {
         transition={{ duration: 0.25, ease: "easeInOut" }}
         className="relative hidden flex-shrink-0 md:block"
       >
-        <div className="sticky top-3 h-[calc(100vh-1.5rem)] sm:top-4 sm:h-[calc(100vh-2rem)]">
+        <div
+          className="sticky"
+          style={{
+            top: "calc(env(safe-area-inset-top) + 0.75rem)",
+            height: "calc(100dvh - env(safe-area-inset-top) - 1.5rem)",
+          }}
+        >
           <div className="relative flex h-full min-w-0 flex-col overflow-hidden rounded-[26px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,18,32,0.94),rgba(9,10,18,0.92))] shadow-[0_20px_58px_rgba(0,0,0,0.28)] backdrop-blur-xl">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,212,255,0.12),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(124,58,237,0.12),transparent_28%)]" />
 
