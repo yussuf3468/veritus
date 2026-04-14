@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Bell, Bot, LogOut, Menu, User } from "lucide-react";
@@ -10,6 +11,13 @@ const PAGE_META = [
     match: (pathname: string) => pathname === "/dashboard",
     title: "Dashboard",
     subtitle: "See the signals that deserve attention first.",
+  },
+  {
+    match: (pathname: string) =>
+      pathname === "/ai" || pathname.startsWith("/dashboard/ai"),
+    title: "Veritus AI",
+    subtitle:
+      "Research, plan, and act from a dedicated intelligence workspace.",
   },
   {
     match: (pathname: string) =>
@@ -72,7 +80,7 @@ interface HeaderProps {
 
 export function Header({ userEmail, userName, dateLabel }: HeaderProps) {
   const pathname = usePathname();
-  const { toggleAIChat, toggleMobileSidebar } = useUIStore();
+  const { toggleMobileSidebar } = useUIStore();
   const meta = getPageMeta(pathname);
 
   async function signOut() {
@@ -131,14 +139,14 @@ export function Header({ userEmail, userName, dateLabel }: HeaderProps) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <button
-              onClick={toggleAIChat}
+            <Link
+              href="/dashboard/ai"
               className="flex h-9 items-center gap-2 rounded-xl border border-brand-cyan/20 bg-brand-cyan/10 px-3 text-sm font-medium text-brand-cyan transition-colors hover:bg-brand-cyan/15"
               aria-label="Open AI assistant"
             >
               <Bot size={15} />
-              <span>Capture</span>
-            </button>
+              <span>Veritus AI</span>
+            </Link>
 
             <button
               className="hidden h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-slate-400 transition-colors hover:text-white sm:flex"

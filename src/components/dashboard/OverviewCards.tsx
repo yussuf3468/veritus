@@ -13,19 +13,18 @@ import {
   CheckSquare,
   Circle,
   Clock,
-  DollarSign,
   Flame,
   Monitor,
   Star,
   Target,
   TrendingDown,
   TrendingUp,
+  Wallet,
   Zap,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { SkeletonDashboard } from "@/components/ui/Skeleton";
-import { cn } from "@/lib/utils";
-import { useUIStore } from "@/store/ui";
+import { cn, formatCurrency } from "@/lib/utils";
 
 interface AgendaTask {
   id: string;
@@ -86,13 +85,8 @@ interface Props {
 
 type StatusTone = "cyan" | "amber" | "rose" | "emerald";
 
-function fmt(value: number, currency = "USD") {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
+function fmt(value: number, currency = "KES") {
+  return formatCurrency(value, currency);
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -180,8 +174,6 @@ export function OverviewCards({
   snapshotDateLabel,
   dayPeriod = "day",
 }: Props) {
-  const setAIChat = useUIStore((state) => state.setAIChat);
-
   if (loading) return <SkeletonDashboard />;
 
   const { tasks, money, habits, goals, devices, learningHoursThisWeek } =
@@ -318,7 +310,7 @@ export function OverviewCards({
       title: "Money",
       href: "/dashboard/money",
       icon: (
-        <DollarSign
+        <Wallet
           size={18}
           className={money.balance >= 0 ? "text-emerald-300" : "text-red-300"}
         />
@@ -467,14 +459,13 @@ export function OverviewCards({
               </p>
 
               <div className="mt-4 flex flex-wrap gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setAIChat(true)}
+                <Link
+                  href="/dashboard/ai"
                   className="flex items-center gap-2 rounded-xl border border-brand-cyan/20 bg-brand-cyan/10 px-3.5 py-2.5 text-sm font-medium text-brand-cyan transition-colors hover:bg-brand-cyan/15"
                 >
                   <Bot size={16} />
                   Capture with AI
-                </button>
+                </Link>
 
                 <Link
                   href={primaryAction.href}
@@ -798,14 +789,13 @@ export function OverviewCards({
                   <p className="mt-2 text-sm leading-6 text-slate-400">
                     Add a task or ask AI to capture what needs doing next.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setAIChat(true)}
+                  <Link
+                    href="/dashboard/ai"
                     className="mt-5 inline-flex items-center gap-2 rounded-2xl border border-brand-cyan/20 bg-brand-cyan/10 px-4 py-3 text-sm font-medium text-brand-cyan transition-colors hover:bg-brand-cyan/15"
                   >
                     Open AI capture
                     <Bot size={15} />
-                  </button>
+                  </Link>
                 </div>
               )}
             </div>
@@ -1037,9 +1027,8 @@ export function OverviewCards({
             </div>
 
             <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-              <button
-                type="button"
-                onClick={() => setAIChat(true)}
+              <Link
+                href="/dashboard/ai"
                 className="flex items-center justify-between rounded-[18px] border border-brand-cyan/20 bg-brand-cyan/10 px-3.5 py-3 text-left text-sm font-medium text-brand-cyan transition-colors hover:bg-brand-cyan/15"
               >
                 <span className="flex items-center gap-2">
@@ -1047,7 +1036,7 @@ export function OverviewCards({
                   Capture with AI
                 </span>
                 <ArrowRight size={14} />
-              </button>
+              </Link>
 
               {[
                 {
@@ -1058,7 +1047,7 @@ export function OverviewCards({
                 {
                   href: "/dashboard/money",
                   label: "Open money",
-                  icon: <DollarSign size={15} className="text-emerald-300" />,
+                  icon: <Wallet size={15} className="text-emerald-300" />,
                 },
                 {
                   href: "/dashboard/goals",

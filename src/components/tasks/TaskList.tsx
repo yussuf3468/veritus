@@ -18,6 +18,7 @@ import {
   ChevronDown,
   AlertOctagon,
   Timer,
+  RefreshCw,
 } from "lucide-react";
 import { useTaskStore } from "@/store/tasks";
 import { Button } from "@/components/ui/Button";
@@ -87,23 +88,50 @@ function groupByDue(tasks: Task[]) {
 /* ── Skeleton ─────────────────────────────────────────────── */
 function TaskListSkeleton() {
   return (
-    <div className="space-y-5">
-      <SkeletonStats count={4} />
-      <div className="flex gap-2">
-        <Skeleton className="h-9 flex-1 rounded-xl" />
-        <Skeleton className="h-9 w-24 rounded-xl" />
-        <Skeleton className="h-9 w-24 rounded-xl" />
+    <div className="space-y-6">
+      <div className="rounded-[30px] border border-white/8 bg-[#08111d]/90 p-5 shadow-[0_24px_80px_rgba(4,9,20,0.42)] backdrop-blur-xl sm:p-6">
+        <Skeleton className="h-5 w-28 rounded-full" />
+        <Skeleton className="mt-4 h-10 w-full max-w-xl rounded-2xl" />
+        <Skeleton className="mt-3 h-4 w-full max-w-2xl rounded-full" />
+        <Skeleton className="mt-2 h-4 w-full max-w-xl rounded-full" />
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <SkeletonStats count={4} />
+        </div>
       </div>
-      <SkeletonList rows={6} />
+      <div className="rounded-[30px] border border-white/8 bg-[#09111d]/82 p-5 shadow-[0_22px_70px_rgba(4,9,20,0.36)] backdrop-blur-xl sm:p-6">
+        <div className="flex gap-2">
+          <Skeleton className="h-11 flex-1 rounded-2xl" />
+          <Skeleton className="h-11 w-24 rounded-2xl" />
+          <Skeleton className="h-11 w-24 rounded-2xl" />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Skeleton className="h-8 w-20 rounded-full" />
+          <Skeleton className="h-8 w-24 rounded-full" />
+          <Skeleton className="h-8 w-24 rounded-full" />
+          <Skeleton className="h-8 w-20 rounded-full" />
+        </div>
+        <div className="mt-5">
+          <SkeletonList rows={6} />
+        </div>
+      </div>
     </div>
   );
 }
 
 /* ─────────────────────────── Main ─────────────────────────── */
-export function TaskList() {
+type TaskListProps = {
+  initialTasks?: Task[];
+  initialLoaded?: boolean;
+};
+
+export function TaskList({
+  initialTasks = [],
+  initialLoaded = false,
+}: TaskListProps) {
   const { tasks, setTasks, addTask, updateTask, removeTask, setLoading } =
     useTaskStore();
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!initialLoaded);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [view, setView] = useState<ViewMode>("list");
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -112,24 +140,36 @@ export function TaskList() {
   const [showModal, setShowModal] = useState(false);
   const [editTask, setEditTask] = useState<Task | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/tasks");
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error);
-      setTasks(j.data);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Load failed");
-    } finally {
-      setLoading(false);
-      setIsLoading(false);
-    }
-  }, [setTasks, setLoading]);
+  const load = useCallback(
+    async (showSkeleton = false) => {
+      if (showSkeleton) setIsLoading(true);
+      setLoading(true);
+      setIsRefreshing(true);
+      try {
+        const res = await fetch("/api/tasks");
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error);
+        setTasks(j.data);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Load failed");
+      } finally {
+        setLoading(false);
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [setTasks, setLoading],
+  );
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (initialLoaded) {
+      setTasks(initialTasks);
+      setIsLoading(false);
+      return;
+    }
+
+    void load(true);
+  }, [initialLoaded, initialTasks, load, setTasks]);
 
   async function cycleStatus(task: Task) {
     const next = STATUS_NEXT[task.status] ?? "pending";
@@ -142,26 +182,41 @@ export function TaskList() {
       });
       if (!res.ok) {
         updateTask(task.id, { status: task.status });
-        toast.error("Failed");
+        toast.error("Failed to update task");
       } else if (next === "completed") toast.success("Task done! 🎉");
     } catch {
       updateTask(task.id, { status: task.status });
+      toast.error("Failed to update task");
     }
   }
 
   async function deleteTask(id: string) {
+    const previousTasks = tasks;
     removeTask(id);
-    await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+    try {
+      const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+    } catch {
+      setTasks(previousTasks);
+      toast.error("Failed to delete task");
+    }
   }
 
   async function toggleFocus(task: Task) {
     const next = !task.is_focus;
     updateTask(task.id, { is_focus: next });
-    await fetch(`/api/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_focus: next }),
-    });
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_focus: next }),
+      });
+
+      if (!res.ok) throw new Error();
+    } catch {
+      updateTask(task.id, { is_focus: task.is_focus });
+      toast.error("Failed to update focus lane");
+    }
   }
 
   const stats = useMemo(
@@ -170,7 +225,10 @@ export function TaskList() {
       inProgress: tasks.filter((t) => t.status === "in_progress").length,
       completed: tasks.filter((t) => t.status === "completed").length,
       overdue: tasks.filter(isOverdue).length,
-      focus: tasks.filter((t) => t.is_focus).length,
+      focus: tasks.filter(
+        (t) =>
+          t.is_focus && t.status !== "completed" && t.status !== "cancelled",
+      ).length,
     }),
     [tasks],
   );
@@ -199,167 +257,426 @@ export function TaskList() {
       (PRIORITY_ORDER[a.priority] ?? 3) - (PRIORITY_ORDER[b.priority] ?? 3),
   );
 
+  const activeCount = useMemo(
+    () =>
+      tasks.filter(
+        (task) => task.status !== "completed" && task.status !== "cancelled",
+      ).length,
+    [tasks],
+  );
+
+  const dueTodayCount = useMemo(
+    () =>
+      tasks.filter(
+        (task) =>
+          task.due_date &&
+          task.status !== "completed" &&
+          task.status !== "cancelled" &&
+          isToday(parseISO(task.due_date)),
+      ).length,
+    [tasks],
+  );
+
+  const urgentCount = useMemo(
+    () =>
+      tasks.filter(
+        (task) =>
+          task.priority === "urgent" &&
+          task.status !== "completed" &&
+          task.status !== "cancelled",
+      ).length,
+    [tasks],
+  );
+
+  const completionRate = tasks.length
+    ? Math.round((stats.completed / tasks.length) * 100)
+    : 0;
+
+  const focusHighlights = useMemo(
+    () =>
+      sorted
+        .filter(
+          (task) =>
+            task.is_focus &&
+            task.status !== "completed" &&
+            task.status !== "cancelled",
+        )
+        .slice(0, 3),
+    [sorted],
+  );
+
+  const nextDueTask = useMemo(() => {
+    const dueTasks = tasks
+      .filter(
+        (task) =>
+          task.due_date &&
+          task.status !== "completed" &&
+          task.status !== "cancelled",
+      )
+      .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
+
+    return dueTasks[0] ?? null;
+  }, [tasks]);
+
+  const guidance = useMemo(() => {
+    if (urgentCount > 0) {
+      return {
+        title: `You have ${urgentCount} urgent ${urgentCount === 1 ? "task" : "tasks"} demanding attention.`,
+        body: "Clear the red lane first, then move one in-progress item across the line before opening anything new.",
+      };
+    }
+
+    if (dueTodayCount > 0) {
+      return {
+        title: `There are ${dueTodayCount} ${dueTodayCount === 1 ? "task due" : "tasks due"} today.`,
+        body: "Keep the day tight: finish due work first, then use the focus lane to protect the next meaningful block.",
+      };
+    }
+
+    if (stats.inProgress > 0) {
+      return {
+        title: "Momentum is already underway.",
+        body: "You have active work moving. Finish one item cleanly before expanding the queue.",
+      };
+    }
+
+    if (stats.focus > 0) {
+      return {
+        title: "Your focus lane is ready.",
+        body: "Stay inside the pinned queue and keep everything else parked until these priorities are done.",
+      };
+    }
+
+    return {
+      title: "The task board is calm and ready for the next move.",
+      body: "Capture the next concrete action, keep the queue lean, and use focus mode when you want a smaller operating surface.",
+    };
+  }, [dueTodayCount, stats.focus, stats.inProgress, urgentCount]);
+
+  const hasFilters = Boolean(
+    search || focusMode || tagFilter || statusTab !== "all",
+  );
+
   if (isLoading) return <TaskListSkeleton />;
 
   return (
-    <div className="space-y-5 animate-fade-in">
-      {/* Stats bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          {
-            label: "Pending",
-            count: stats.pending,
-            color: "#94a3b8",
-            tab: "pending" as StatusTab,
-          },
-          {
-            label: "In Progress",
-            count: stats.inProgress,
-            color: "#00d4ff",
-            tab: "in_progress" as StatusTab,
-          },
-          {
-            label: "Completed",
-            count: stats.completed,
-            color: "#00ff88",
-            tab: "completed" as StatusTab,
-          },
-          {
-            label: "Overdue",
-            count: stats.overdue,
-            color: "#f87171",
-            tab: "all" as StatusTab,
-          },
-        ].map((s) => (
-          <button
-            key={s.label}
-            onClick={() =>
-              setStatusTab((prev) =>
-                prev === s.tab && s.tab !== "all" ? "all" : s.tab,
-              )
-            }
-            className={cn(
-              "glass rounded-xl p-3 text-left border transition-all hover:border-white/10",
-              statusTab === s.tab && s.tab !== "all"
-                ? "border-white/20"
-                : "border-transparent",
-            )}
-          >
-            <p className="text-2xl font-bold" style={{ color: s.color }}>
-              {s.count}
-            </p>
-            <p className="text-[10px] text-slate-500 mt-0.5">{s.label}</p>
-          </button>
-        ))}
-      </div>
+    <div className="space-y-6 animate-fade-in">
+      <section className="relative overflow-hidden rounded-[30px] border border-white/10 bg-[#08111d]/90 p-5 shadow-[0_24px_80px_rgba(4,9,20,0.42)] backdrop-blur-xl sm:p-6">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,212,255,0.14),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(124,58,237,0.12),transparent_35%)]" />
+        <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_340px]">
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] uppercase tracking-[0.28em] text-slate-300">
+              <CheckCircle2 size={12} className="text-brand-cyan" />
+              Task Command
+            </div>
+            <div className="space-y-3">
+              <h1 className="max-w-3xl text-2xl font-semibold tracking-tight text-white sm:text-[2rem]">
+                {guidance.title}
+              </h1>
+              <p className="max-w-3xl text-sm leading-6 text-slate-300 sm:text-[15px]">
+                {guidance.body}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {urgentCount > 0 && (
+                <span className="rounded-full border border-red-400/20 bg-red-400/10 px-3 py-1 text-xs text-red-200">
+                  {urgentCount} urgent in queue
+                </span>
+              )}
+              {dueTodayCount > 0 && (
+                <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">
+                  {dueTodayCount} due today
+                </span>
+              )}
+              {nextDueTask?.due_date && (
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300">
+                  Next due: {formatDate(nextDueTask.due_date)}
+                </span>
+              )}
+              {hasFilters && (
+                <span className="rounded-full border border-brand-purple/20 bg-brand-purple/10 px-3 py-1 text-xs text-purple-100">
+                  Filters active
+                </span>
+              )}
+            </div>
+          </div>
 
-      {/* Controls */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search
-            size={13}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
-          />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search tasks…"
-            className="w-full bg-bg-secondary border border-surface-border rounded-xl pl-9 pr-9 py-2 text-sm text-white placeholder-slate-600 focus:border-brand-cyan/50 outline-none transition-colors"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
-            >
-              <X size={12} />
-            </button>
-          )}
+          <div className="grid gap-3">
+            <div className="rounded-[24px] border border-white/8 bg-black/20 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500">
+                    Momentum
+                  </p>
+                  <p className="mt-3 text-3xl font-semibold text-white">
+                    {completionRate}%
+                  </p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    completion rate across {tasks.length} tracked tasks
+                  </p>
+                </div>
+                <CheckCircle2 size={20} className="text-brand-green" />
+              </div>
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/5">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-brand-cyan via-brand-purple to-brand-green"
+                  style={{
+                    width: `${Math.max(completionRate, tasks.length ? 8 : 0)}%`,
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-[24px] border border-white/8 bg-black/20 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500">
+                    Focus Lane
+                  </p>
+                  <p className="mt-2 text-sm text-slate-300">
+                    {focusHighlights.length > 0
+                      ? "Pinned work that deserves the next clean block."
+                      : "No tasks pinned yet. Use the flame icon to build a smaller working lane."}
+                  </p>
+                </div>
+                <Flame size={18} className="text-orange-400" />
+              </div>
+
+              {focusHighlights.length > 0 ? (
+                <div className="mt-4 space-y-2">
+                  {focusHighlights.map((task) => (
+                    <button
+                      key={task.id}
+                      onClick={() => setEditTask(task)}
+                      className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/6 bg-white/[0.03] px-3 py-2 text-left transition-colors hover:border-white/12"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-white">
+                          {task.title}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {task.due_date
+                            ? formatDate(task.due_date)
+                            : "No due date"}
+                        </p>
+                      </div>
+                      <ArrowRight size={14} className="text-slate-500" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
-        <div className="flex gap-2 flex-shrink-0">
-          <button
-            onClick={() => setFocusMode((v) => !v)}
-            className={cn(
-              "px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 border transition-all",
-              focusMode
-                ? "border-orange-500/50 text-orange-400 bg-orange-400/10"
-                : "border-surface-border text-slate-400 hover:text-white",
-            )}
-          >
-            <Flame size={12} /> Focus {focusMode && `(${stats.focus})`}
-          </button>
-          <div className="flex rounded-xl overflow-hidden border border-surface-border">
-            {(["list", "kanban"] as ViewMode[]).map((v) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
+
+        <div className="relative mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <TaskMetricCard
+            label="Open Queue"
+            value={String(activeCount)}
+            description="tasks still active"
+            icon={Circle}
+            accent="#94a3b8"
+          />
+          <TaskMetricCard
+            label="In Progress"
+            value={String(stats.inProgress)}
+            description="already moving"
+            icon={Timer}
+            accent="#00d4ff"
+          />
+          <TaskMetricCard
+            label="Focus Items"
+            value={String(stats.focus)}
+            description="pinned for deep work"
+            icon={Flame}
+            accent="#fb923c"
+          />
+          <TaskMetricCard
+            label="Overdue"
+            value={String(stats.overdue)}
+            description="need recovery"
+            icon={AlertOctagon}
+            accent="#f87171"
+          />
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-[30px] border border-white/8 bg-[#09111d]/82 shadow-[0_22px_70px_rgba(4,9,20,0.36)] backdrop-blur-xl">
+        <div className="border-b border-white/6 p-4 sm:p-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div className="space-y-1">
+              <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500">
+                Workspace Controls
+              </p>
+              <h2 className="text-lg font-semibold text-white">
+                Filter, triage, and move the right queue
+              </h2>
+              <p className="text-sm text-slate-400">
+                Switch between list and board views, isolate focus work, and
+                keep the active lane clean.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={focusMode ? "outline" : "ghost"}
+                size="sm"
+                onClick={() => setFocusMode((value) => !value)}
                 className={cn(
-                  "px-3 py-1.5 text-xs flex items-center gap-1.5 transition-colors",
-                  view === v
-                    ? "bg-brand-cyan/10 text-brand-cyan"
-                    : "text-slate-400 hover:text-white",
+                  "rounded-xl border border-white/10 bg-white/[0.03]",
+                  focusMode &&
+                    "border-orange-400/40 bg-orange-400/10 text-orange-300",
                 )}
               >
-                {v === "list" ? <List size={12} /> : <SquareKanban size={12} />}
-                {v === "list" ? "List" : "Board"}
-              </button>
-            ))}
-          </div>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setShowModal(true)}
-          >
-            <Plus size={13} /> New
-          </Button>
-        </div>
-      </div>
+                <Flame size={13} /> Focus lane{" "}
+                {stats.focus > 0 ? `(${stats.focus})` : ""}
+              </Button>
 
-      {/* Tag chips */}
-      {allTags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {allTags.map((tag) => (
-            <button
-              key={tag}
-              onClick={() => setTagFilter((t) => (t === tag ? null : tag))}
-              className={cn(
-                "px-2.5 py-1 rounded-full text-[10px] border transition-all flex items-center gap-1",
-                tagFilter === tag
-                  ? "border-brand-cyan/50 text-brand-cyan bg-brand-cyan/10"
-                  : "border-surface-border text-slate-500 hover:text-white",
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void load(false)}
+                className="rounded-xl border border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.06]"
+              >
+                <RefreshCw
+                  size={13}
+                  className={cn(isRefreshing && "animate-spin")}
+                />
+                Refresh
+              </Button>
+
+              <div className="flex rounded-[14px] border border-white/10 bg-black/20 p-1">
+                {(["list", "kanban"] as ViewMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setView(mode)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-colors",
+                      view === mode
+                        ? "bg-brand-cyan/12 text-brand-cyan"
+                        : "text-slate-400 hover:text-white",
+                    )}
+                  >
+                    {mode === "list" ? (
+                      <List size={12} />
+                    ) : (
+                      <SquareKanban size={12} />
+                    )}
+                    {mode === "list" ? "List" : "Board"}
+                  </button>
+                ))}
+              </div>
+
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowModal(true)}
+                className="rounded-xl"
+              >
+                <Plus size={13} /> New task
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3">
+            <div className="relative">
+              <Search
+                size={14}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+              />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search tasks, descriptions, and execution lanes"
+                className="h-11 w-full rounded-2xl border border-white/8 bg-black/20 pl-10 pr-10 text-sm text-white placeholder:text-slate-600 outline-none transition-colors focus:border-brand-cyan/40"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 transition-colors hover:text-white"
+                >
+                  <X size={12} />
+                </button>
               )}
-            >
-              <Tag size={8} /> {tag}
-            </button>
-          ))}
-          {tagFilter && (
-            <button
-              onClick={() => setTagFilter(null)}
-              className="px-2.5 py-1 rounded-full text-[10px] text-red-400 border border-red-400/30 hover:bg-red-400/10 transition-all"
-            >
-              ✕ clear
-            </button>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: "All", value: "all" as StatusTab },
+                { label: "Pending", value: "pending" as StatusTab },
+                { label: "In Progress", value: "in_progress" as StatusTab },
+                { label: "Completed", value: "completed" as StatusTab },
+              ].map((tab) => (
+                <button
+                  key={tab.value}
+                  onClick={() => setStatusTab(tab.value)}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-xs font-medium transition-all",
+                    statusTab === tab.value
+                      ? "border-brand-cyan/35 bg-brand-cyan/10 text-brand-cyan"
+                      : "border-white/8 bg-white/[0.03] text-slate-400 hover:text-white",
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {allTags.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setTagFilter(null)}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-xs font-medium transition-all",
+                    !tagFilter
+                      ? "border-white/18 bg-white/[0.05] text-white"
+                      : "border-white/8 bg-white/[0.03] text-slate-400 hover:text-white",
+                  )}
+                >
+                  All tags
+                </button>
+                {allTags.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() =>
+                      setTagFilter((current) => (current === tag ? null : tag))
+                    }
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all",
+                      tagFilter === tag
+                        ? "border-brand-purple/30 bg-brand-purple/10 text-purple-100"
+                        : "border-white/8 bg-white/[0.03] text-slate-400 hover:text-white",
+                    )}
+                  >
+                    <Tag size={10} />
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="p-4 sm:p-5">
+          {view === "list" ? (
+            <ListView
+              tasks={sorted}
+              onCycle={cycleStatus}
+              onDelete={deleteTask}
+              onFocus={toggleFocus}
+              onEdit={setEditTask}
+            />
+          ) : (
+            <KanbanView
+              tasks={sorted}
+              onCycle={cycleStatus}
+              onDelete={deleteTask}
+              onFocus={toggleFocus}
+              onEdit={setEditTask}
+            />
           )}
         </div>
-      )}
-
-      {/* View */}
-      {view === "list" ? (
-        <ListView
-          tasks={sorted}
-          onCycle={cycleStatus}
-          onDelete={deleteTask}
-          onFocus={toggleFocus}
-          onEdit={setEditTask}
-        />
-      ) : (
-        <KanbanView
-          tasks={sorted}
-          onCycle={cycleStatus}
-          onDelete={deleteTask}
-          onFocus={toggleFocus}
-          onEdit={setEditTask}
-        />
-      )}
+      </section>
 
       <TaskModal
         open={showModal}
@@ -378,6 +695,37 @@ export function TaskList() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+function TaskMetricCard({
+  label,
+  value,
+  description,
+  icon: Icon,
+  accent,
+}: {
+  label: string;
+  value: string;
+  description: string;
+  icon: typeof CheckCircle2;
+  accent: string;
+}) {
+  return (
+    <div className="rounded-[22px] border border-white/8 bg-black/20 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500">
+            {label}
+          </p>
+          <p className="mt-3 text-3xl font-semibold" style={{ color: accent }}>
+            {value}
+          </p>
+          <p className="mt-1 text-sm text-slate-400">{description}</p>
+        </div>
+        <Icon size={18} style={{ color: accent }} />
+      </div>
     </div>
   );
 }
@@ -445,17 +793,25 @@ function ListView({ tasks, onCycle, onDelete, onFocus, onEdit }: TVProps) {
 
   if (tasks.length === 0)
     return (
-      <div className="text-center py-16 text-slate-500 text-sm">
-        <CheckCircle2 size={36} className="mx-auto mb-3 opacity-20" />
-        <p>No tasks match your filters.</p>
+      <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.02] px-6 py-16 text-center">
+        <CheckCircle2 size={36} className="mx-auto mb-4 text-slate-600" />
+        <h3 className="text-base font-medium text-white">
+          No tasks match this view.
+        </h3>
+        <p className="mt-2 text-sm text-slate-400">
+          Clear a filter or create a new task to refill the lane.
+        </p>
       </div>
     );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {sections.map((sec) => (
-        <div key={sec.key}>
-          <div className="flex items-center gap-2 mb-2.5">
+        <section
+          key={sec.key}
+          className="rounded-[24px] border border-white/6 bg-white/[0.02] p-3.5 sm:p-4"
+        >
+          <div className="mb-3 flex items-center gap-2">
             {sec.icon && (
               <AlertOctagon size={12} style={{ color: sec.color }} />
             )}
@@ -469,7 +825,7 @@ function ListView({ tasks, onCycle, onDelete, onFocus, onEdit }: TVProps) {
             >
               {sec.label}
             </span>
-            <span className="text-xs text-slate-600">({sec.tasks.length})</span>
+            <span className="text-xs text-slate-500">({sec.tasks.length})</span>
           </div>
           <div className="space-y-2">
             <AnimatePresence mode="popLayout">
@@ -485,13 +841,13 @@ function ListView({ tasks, onCycle, onDelete, onFocus, onEdit }: TVProps) {
               ))}
             </AnimatePresence>
           </div>
-        </div>
+        </section>
       ))}
       {completed.length > 0 && (
-        <div>
+        <section className="rounded-[24px] border border-white/6 bg-white/[0.02] p-3.5 sm:p-4">
           <button
             onClick={() => setShowDone((v) => !v)}
-            className="flex items-center gap-2 mb-2.5"
+            className="mb-2 flex items-center gap-2"
           >
             <div className="w-1.5 h-1.5 rounded-full bg-brand-green" />
             <span className="text-xs font-bold uppercase tracking-wider text-brand-green">
@@ -529,7 +885,7 @@ function ListView({ tasks, onCycle, onDelete, onFocus, onEdit }: TVProps) {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+        </section>
       )}
     </div>
   );
@@ -551,14 +907,14 @@ function TaskRow({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -16 }}
       className={cn(
-        "glass glass-hover rounded-xl px-4 py-3 flex items-start gap-3 group border-l-2 transition-all",
+        "group flex items-start gap-3 rounded-[20px] border bg-[#07101a]/80 px-4 py-3.5 shadow-[0_16px_40px_rgba(2,6,23,0.18)] transition-all hover:border-white/14",
         task.priority === "urgent"
-          ? "border-l-red-400"
+          ? "border-l-[3px] border-l-red-400 border-red-400/18"
           : task.priority === "high"
-            ? "border-l-orange-400"
+            ? "border-l-[3px] border-l-orange-400 border-white/8"
             : task.priority === "medium"
-              ? "border-l-yellow-400"
-              : "border-l-slate-700",
+              ? "border-l-[3px] border-l-yellow-400 border-white/8"
+              : "border-l-[3px] border-l-slate-700 border-white/8",
         dimmed && "opacity-50",
       )}
     >
@@ -592,14 +948,14 @@ function TaskRow({
           {task.title}
         </p>
         {task.description && (
-          <p className="text-xs text-slate-500 mt-0.5 truncate">
+          <p className="mt-1 text-xs leading-5 text-slate-400">
             {task.description}
           </p>
         )}
-        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <span
             className={cn(
-              "text-[10px] px-1.5 py-0.5 rounded border font-medium capitalize",
+              "rounded-full border px-2 py-1 text-[10px] font-medium capitalize",
               getPriorityColor(task.priority),
             )}
           >
@@ -624,21 +980,23 @@ function TaskRow({
           {task.tags?.slice(0, 3).map((tag) => (
             <span
               key={tag}
-              className="text-[10px] text-slate-500 bg-surface-border px-1.5 py-0.5 rounded"
+              className="rounded-full bg-white/[0.04] px-2 py-1 text-[10px] text-slate-400"
             >
               #{tag}
             </span>
           ))}
           {task.ai_suggested && (
-            <span className="text-[10px] text-brand-purple">✦ AI</span>
+            <span className="rounded-full bg-brand-purple/10 px-2 py-1 text-[10px] text-purple-100">
+              ✦ AI
+            </span>
           )}
         </div>
       </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+      <div className="flex flex-shrink-0 items-center gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
         <button
           onClick={() => onFocus(task)}
           className={cn(
-            "p-1.5 rounded-lg transition-colors",
+            "rounded-xl p-2 transition-colors",
             task.is_focus
               ? "text-orange-400 bg-orange-400/10"
               : "text-slate-500 hover:text-orange-400 hover:bg-orange-400/10",
@@ -648,13 +1006,13 @@ function TaskRow({
         </button>
         <button
           onClick={() => onEdit(task)}
-          className="p-1.5 rounded-lg text-slate-500 hover:text-brand-cyan hover:bg-brand-cyan/10 transition-colors"
+          className="rounded-xl p-2 text-slate-500 transition-colors hover:bg-brand-cyan/10 hover:text-brand-cyan"
         >
           <Edit2 size={13} />
         </button>
         <button
           onClick={() => onDelete(task.id)}
-          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-400/10 transition-colors"
+          className="rounded-xl p-2 text-slate-500 transition-colors hover:bg-red-400/10 hover:text-red-400"
         >
           <Trash2 size={13} />
         </button>
@@ -671,12 +1029,15 @@ function KanbanView({ tasks, onCycle, onDelete, onFocus, onEdit }: TVProps) {
     { key: "completed", label: "Completed", color: "#00ff88" },
   ];
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
       {columns.map((col) => {
         const colTasks = tasks.filter((t) => t.status === col.key);
         return (
-          <div key={col.key} className="glass rounded-2xl p-4">
-            <div className="flex items-center gap-2 mb-4">
+          <section
+            key={col.key}
+            className="rounded-[24px] border border-white/6 bg-white/[0.02] p-4"
+          >
+            <div className="mb-4 flex items-center gap-2">
               <div
                 className="w-2 h-2 rounded-full"
                 style={{ background: col.color }}
@@ -686,7 +1047,7 @@ function KanbanView({ tasks, onCycle, onDelete, onFocus, onEdit }: TVProps) {
                 {colTasks.length}
               </span>
             </div>
-            <div className="space-y-2 min-h-[80px]">
+            <div className="min-h-[80px] space-y-2">
               <AnimatePresence mode="popLayout">
                 {colTasks.map((task) => (
                   <KanbanCard
@@ -694,17 +1055,18 @@ function KanbanView({ tasks, onCycle, onDelete, onFocus, onEdit }: TVProps) {
                     task={task}
                     onCycle={onCycle}
                     onDelete={onDelete}
+                    onFocus={onFocus}
                     onEdit={onEdit}
                   />
                 ))}
               </AnimatePresence>
               {colTasks.length === 0 && (
-                <div className="text-center py-8 text-slate-700 text-xs border-2 border-dashed border-surface-border rounded-xl">
-                  Empty
+                <div className="rounded-[18px] border border-dashed border-white/10 px-4 py-8 text-center text-xs text-slate-500">
+                  Empty lane
                 </div>
               )}
             </div>
-          </div>
+          </section>
         );
       })}
     </div>
@@ -715,8 +1077,9 @@ function KanbanCard({
   task,
   onCycle,
   onDelete,
+  onFocus,
   onEdit,
-}: Omit<TVProps, "tasks" | "onFocus"> & { task: Task }) {
+}: Omit<TVProps, "tasks"> & { task: Task }) {
   const overdue = isOverdue(task);
   return (
     <motion.div
@@ -726,13 +1089,13 @@ function KanbanCard({
       exit={{ opacity: 0, scale: 0.9 }}
       onClick={() => onEdit(task)}
       className={cn(
-        "bg-bg-primary border rounded-xl p-3 group cursor-pointer hover:border-white/20 transition-all",
-        overdue ? "border-red-400/30" : "border-surface-border",
+        "group cursor-pointer rounded-[20px] border bg-[#07101a]/80 p-3.5 transition-all hover:border-white/14",
+        overdue ? "border-red-400/24" : "border-white/8",
       )}
     >
       <p
         className={cn(
-          "text-xs font-medium text-white leading-snug mb-2",
+          "mb-2 text-sm font-medium leading-snug text-white",
           task.status === "completed" && "line-through text-slate-500",
         )}
       >
@@ -741,10 +1104,15 @@ function KanbanCard({
         )}
         {task.title}
       </p>
-      <div className="flex items-center gap-1.5 flex-wrap mb-2">
+      {task.description && (
+        <p className="mb-3 text-xs leading-5 text-slate-400">
+          {task.description}
+        </p>
+      )}
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
         <span
           className={cn(
-            "text-[9px] px-1.5 py-0.5 rounded border font-medium capitalize",
+            "rounded-full border px-2 py-1 text-[9px] font-medium capitalize",
             getPriorityColor(task.priority),
           )}
         >
@@ -763,20 +1131,32 @@ function KanbanCard({
         )}
       </div>
       <div
-        className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="flex gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={() => onCycle(task)}
-          className="flex-1 text-[9px] py-1 rounded bg-surface-border hover:bg-white/10 text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1"
+          className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-white/[0.06] py-2 text-[10px] text-slate-300 transition-colors hover:bg-white/[0.1] hover:text-white"
         >
-          <ArrowRight size={9} /> Move →
+          <ArrowRight size={10} />
+          {task.status === "completed" ? "Reopen" : "Advance"}
+        </button>
+        <button
+          onClick={() => onFocus(task)}
+          className={cn(
+            "rounded-xl p-2 transition-colors",
+            task.is_focus
+              ? "bg-orange-400/10 text-orange-300"
+              : "text-slate-500 hover:bg-orange-400/10 hover:text-orange-300",
+          )}
+        >
+          <Flame size={11} />
         </button>
         <button
           onClick={() => onDelete(task.id)}
-          className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-400/10 transition-all"
+          className="rounded-xl p-2 text-slate-500 transition-all hover:bg-red-400/10 hover:text-red-400"
         >
-          <Trash2 size={10} />
+          <Trash2 size={11} />
         </button>
       </div>
     </motion.div>

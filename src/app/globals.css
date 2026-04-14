@@ -213,3 +213,43 @@ body {
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
+
+@keyframes ai-orb-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translate3d(14px, -12px, 0) scale(1.07);
+    opacity: 1;
+  }
+}
+
+@keyframes ai-grid-pan {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -10px, 0);
+  }
+}
+
+.ai-grid-surface {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-position: center;
+  background-size: 28px 28px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.6), transparent 92%);
+  animation: ai-grid-pan 18s ease-in-out infinite;
+}
+
+.ai-orb-drift-cyan {
+  animation: ai-orb-drift 15s ease-in-out infinite;
+}
+
+.ai-orb-drift-purple {
+  animation: ai-orb-drift 18s ease-in-out infinite reverse;
+}

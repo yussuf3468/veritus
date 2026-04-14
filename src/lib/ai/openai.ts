@@ -1,8 +1,9 @@
 import OpenAI from "openai";
+import { formatCurrency, resolveCurrencyCode } from "@/lib/utils";
 
-const MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+const MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
-const MAX_MODEL_TOKENS = 420;
+const MAX_MODEL_TOKENS = 820;
 const HAS_MODEL_PROVIDER = Boolean(
   OPENAI_API_KEY && OPENAI_API_KEY !== "your-openai-api-key",
 );
@@ -13,12 +14,67 @@ export interface AIMessage {
 }
 
 export interface AIContext {
-  tasks?: { pending: number; urgent: number };
-  money?: { balance: number; currency: string };
-  habits?: { total: number; completedToday: number };
-  goals?: { active: number };
+  profile?: { name?: string };
+  today?: string;
+  tasks?: {
+    pending: number;
+    urgent: number;
+    inProgress?: number;
+    focus?: number;
+    overdue?: number;
+    recent?: Array<{
+      title: string;
+      priority: string;
+      status: string;
+      dueDate?: string | null;
+      isFocus?: boolean;
+    }>;
+  };
+  money?: {
+    balance: number;
+    currency: string;
+    income?: number;
+    expense?: number;
+    recent?: Array<{
+      type: "income" | "expense";
+      amount: number;
+      category: string;
+      description?: string | null;
+      date: string;
+    }>;
+  };
+  habits?: {
+    total: number;
+    completedToday: number;
+    streaking?: Array<{ name: string; streak: number }>;
+  };
+  goals?: {
+    active: number;
+    recent?: Array<{
+      title: string;
+      progress: number;
+      deadline?: string | null;
+      category?: string | null;
+    }>;
+  };
+  memories?: Array<{
+    source: "chat" | "note";
+    title?: string;
+    content: string;
+    createdAt: string;
+  }>;
   recentNotes?: string[];
 }
+
+type AITaskContextItem = NonNullable<
+  NonNullable<AIContext["tasks"]>["recent"]
+>[number];
+
+type AIMoneyContextItem = NonNullable<
+  NonNullable<AIContext["money"]>["recent"]
+>[number];
+
+type AIMemoryContextItem = NonNullable<AIContext["memories"]>[number];
 
 export interface AISource {
   title: string;
@@ -146,17 +202,14 @@ function toAmount(value: unknown) {
 }
 
 function parseMoneyAmount(message: string) {
-  const match = message.match(/\$?\s*(\d[\d,]*(?:\.\d{1,2})?)/);
+  const match = message.match(
+    /(?:\b(?:ksh|kes|shillings?)\b\s*)?\$?\s*(\d[\d,]*(?:\.\d{1,2})?)(?:\s*\b(?:ksh|kes|shillings?)\b)?/i,
+  );
   return toAmount(match?.[1]);
 }
 
-function formatMoneyAmount(amount: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+function formatMoneyAmount(amount: number, currency = "KES") {
+  return formatCurrency(amount, resolveCurrencyCode(currency));
 }
 
 function inferIncomeCategory(message: string, source?: string) {
@@ -220,6 +273,96 @@ function buildTransactionDescription(message: string, fallback?: string) {
   return `${normalized.slice(0, 177).trimEnd()}...`;
 }
 
+const TASK_PRIORITY_ORDER: Record<string, number> = {
+  urgent: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+};
+
+const TASK_STATUS_ORDER: Record<string, number> = {
+  in_progress: 0,
+  pending: 1,
+  completed: 2,
+  cancelled: 3,
+};
+
+function pickPriorityTask(tasks: AITaskContextItem[] = []) {
+  return (
+    [...tasks].sort((left, right) => {
+      if (Boolean(left.isFocus) !== Boolean(right.isFocus)) {
+        return left.isFocus ? -1 : 1;
+      }
+
+      const priorityGap =
+        (TASK_PRIORITY_ORDER[left.priority] ?? 4) -
+        (TASK_PRIORITY_ORDER[right.priority] ?? 4);
+      if (priorityGap !== 0) return priorityGap;
+
+      const statusGap =
+        (TASK_STATUS_ORDER[left.status] ?? 4) -
+        (TASK_STATUS_ORDER[right.status] ?? 4);
+      if (statusGap !== 0) return statusGap;
+
+      if (left.dueDate && right.dueDate) {
+        return left.dueDate.localeCompare(right.dueDate);
+      }
+
+      if (left.dueDate) return -1;
+      if (right.dueDate) return 1;
+      return left.title.localeCompare(right.title);
+    })[0] ?? null
+  );
+}
+
+function pickLargestExpense(recent: AIMoneyContextItem[] = []) {
+  return (
+    [...recent]
+      .filter((entry) => entry.type === "expense")
+      .sort((left, right) => right.amount - left.amount)[0] ?? null
+  );
+}
+
+function describeTask(task: AITaskContextItem) {
+  const pieces = [task.title];
+  if (task.priority && task.priority !== "medium") {
+    pieces.push(`${task.priority} priority`);
+  }
+  if (task.dueDate) {
+    pieces.push(`due ${task.dueDate}`);
+  }
+  if (task.isFocus) {
+    pieces.push("in focus lane");
+  }
+  return pieces.join(", ");
+}
+
+function clipMemory(memory: AIMemoryContextItem, limit = 180) {
+  const normalized = normalizeWhitespace(memory.content);
+  if (normalized.length <= limit) return normalized;
+  return `${normalized.slice(0, limit - 3).trimEnd()}...`;
+}
+
+function buildMemoryRecallReply(ctx: AIContext) {
+  if (!ctx.memories?.length) {
+    return "I do not have a strong match from past chats or notes for that yet. Name the topic, decision, or note more specifically and I can pull it back in.";
+  }
+
+  const [primary, secondary] = ctx.memories;
+  const firstLine =
+    primary.source === "note"
+      ? `The closest note memory is **${primary.title ?? "untitled note"}**: ${clipMemory(primary)}.`
+      : `The closest past conversation memory is: ${clipMemory(primary)}.`;
+
+  const secondLine = secondary
+    ? secondary.source === "note"
+      ? `Another relevant note is **${secondary.title ?? "untitled note"}**: ${clipMemory(secondary, 140)}.`
+      : `Another relevant chat memory is: ${clipMemory(secondary, 140)}.`
+    : null;
+
+  return [firstLine, secondLine].filter(Boolean).join(" ");
+}
+
 function extractIncomeSource(message: string) {
   const fromMatch = message.match(/\bfrom\s+(.+?)(?:[,.!?]|$)/i)?.[1];
   if (fromMatch) return cleanEntity(fromMatch);
@@ -237,7 +380,7 @@ function extractExpenseTarget(message: string) {
   if (directMatch) return cleanEntity(directMatch);
 
   const purchaseMatch = message.match(
-    /\b(?:bought|purchased)\s+(.+?)\s+for\s+\$?\d[\d,]*(?:\.\d{1,2})?/i,
+    /\b(?:bought|purchased)\s+(.+?)\s+for\s+(?:(?:ksh|kes|shillings?)\s*)?\$?\d[\d,]*(?:\.\d{1,2})?/i,
   )?.[1];
   return cleanEntity(purchaseMatch);
 }
@@ -282,10 +425,19 @@ function createExpenseAction(
 
 function buildSummaryReply(ctx: AIContext) {
   const lines = ["Here is your current snapshot:"];
+  const primaryTask = pickPriorityTask(ctx.tasks?.recent);
+  const topGoal = ctx.goals?.recent?.[0];
+  const largestExpense = pickLargestExpense(ctx.money?.recent);
 
   if (ctx.tasks) {
     lines.push(
-      `You have ${ctx.tasks.pending} pending task${ctx.tasks.pending === 1 ? "" : "s"}${ctx.tasks.urgent > 0 ? `, including ${ctx.tasks.urgent} urgent` : ""}.`,
+      `You have ${ctx.tasks.pending} pending task${ctx.tasks.pending === 1 ? "" : "s"}${ctx.tasks.urgent > 0 ? `, including ${ctx.tasks.urgent} urgent` : ""}${ctx.tasks.inProgress ? `, and ${ctx.tasks.inProgress} already in progress` : ""}.`,
+    );
+  }
+
+  if (primaryTask) {
+    lines.push(
+      `The sharpest task to move next is **${describeTask(primaryTask)}**.`,
     );
   }
 
@@ -299,20 +451,47 @@ function buildSummaryReply(ctx: AIContext) {
     lines.push(`You are tracking ${ctx.goals.active} active goals.`);
   }
 
-  if (ctx.money) {
+  if (topGoal) {
     lines.push(
-      `Your current monthly balance is ${ctx.money.currency} ${ctx.money.balance.toFixed(2)}.`,
+      `The goal with the clearest momentum is **${topGoal.title}** at ${topGoal.progress}% progress.`,
     );
   }
 
+  if (ctx.money) {
+    lines.push(
+      `Your current monthly balance is ${formatMoneyAmount(ctx.money.balance, ctx.money.currency)}.`,
+    );
+  }
+
+  if (largestExpense) {
+    lines.push(
+      `Your biggest recent expense was ${formatMoneyAmount(largestExpense.amount, ctx.money?.currency ?? "KES")} in ${largestExpense.category}.`,
+    );
+  }
+
+  if (ctx.recentNotes?.length) {
+    lines.push(`Recent note context: ${ctx.recentNotes[0]}.`);
+  }
+
   lines.push(
-    "Start with the urgent task, then close one easy win to build momentum.",
+    primaryTask
+      ? `Start with **${primaryTask.title}**, then close one small follow-through item before opening anything new.`
+      : "Start with the urgent task, then close one easy win to build momentum.",
   );
 
   return lines.join(" ");
 }
 
 function buildFocusReply(ctx: AIContext) {
+  const priorityTask = pickPriorityTask(ctx.tasks?.recent);
+  const secondaryTask = ctx.tasks?.recent?.find(
+    (task) => task.title !== priorityTask?.title && task.status !== "completed",
+  );
+
+  if (priorityTask) {
+    return `Start with **${priorityTask.title}**${priorityTask.dueDate ? ` because it is due ${priorityTask.dueDate}` : " because it carries the best leverage"}. Work until it is materially advanced or finished, then move to ${secondaryTask ? `**${secondaryTask.title}**` : "the next smallest follow-through task"}.`;
+  }
+
   if (ctx.tasks?.urgent) {
     return `Your first move should be clearing the ${ctx.tasks.urgent} urgent task${ctx.tasks.urgent === 1 ? "" : "s"}. After that, pick one pending item that reduces tomorrow's load.`;
   }
@@ -331,16 +510,58 @@ function buildFocusReply(ctx: AIContext) {
   return "Your board looks relatively calm. Use this window for planning, reflection, or setting one concrete goal for the next session.";
 }
 
+function buildPlanningReply(ctx: AIContext) {
+  const steps: string[] = [];
+  const priorityTask = pickPriorityTask(ctx.tasks?.recent);
+  const remainingHabits = Math.max(
+    (ctx.habits?.total ?? 0) - (ctx.habits?.completedToday ?? 0),
+    0,
+  );
+  const topGoal = ctx.goals?.recent?.[0];
+
+  if (priorityTask) {
+    steps.push(
+      `1. Start with **${priorityTask.title}**${priorityTask.dueDate ? ` before ${priorityTask.dueDate}` : ""} and stay on it until it is clearly moved forward.`,
+    );
+  }
+
+  if (remainingHabits > 0) {
+    steps.push(
+      `2. Finish the remaining ${remainingHabits} habit${remainingHabits === 1 ? "" : "s"} while momentum is already active.`,
+    );
+  }
+
+  if (topGoal) {
+    steps.push(
+      `3. Spend one focused block advancing **${topGoal.title}** instead of letting goals become background noise.`,
+    );
+  }
+
+  if ((ctx.money?.balance ?? 0) < 0) {
+    steps.push(
+      "4. Review spending before any non-essential purchase so the rest of the week does not drift.",
+    );
+  }
+
+  if (steps.length === 0) {
+    return "Your system is fairly open right now. Set one clear task, one small habit block, and one next move on a goal so the day has shape.";
+  }
+
+  return ["Here is a clean plan for today:", ...steps].join("\n");
+}
+
 function buildMoneyReply(ctx: AIContext) {
   if (!ctx.money) {
     return "I do not have money context yet. Try logging a few transactions and I can summarize your spending pattern.";
   }
 
+  const biggestExpense = pickLargestExpense(ctx.money.recent);
+
   if (ctx.money.balance >= 0) {
-    return `You are net positive this month at ${ctx.money.currency} ${ctx.money.balance.toFixed(2)}. Keep discretionary spending tight and direct the surplus toward a goal or savings bucket.`;
+    return `You are net positive this month at ${formatMoneyAmount(ctx.money.balance, ctx.money.currency)}.${biggestExpense ? ` Your largest recent expense was ${formatMoneyAmount(biggestExpense.amount, ctx.money.currency)} in ${biggestExpense.category}.` : ""} Keep discretionary spending tight and direct the surplus toward a goal or savings bucket.`;
   }
 
-  return `You are currently negative by ${ctx.money.currency} ${Math.abs(ctx.money.balance).toFixed(2)} this month. Cut one low-value expense category this week and avoid adding new recurring costs.`;
+  return `You are currently negative by ${formatMoneyAmount(Math.abs(ctx.money.balance), ctx.money.currency)} this month.${biggestExpense ? ` The clearest expense to review is ${biggestExpense.category} at ${formatMoneyAmount(biggestExpense.amount, ctx.money.currency)}.` : ""} Cut one low-value expense category this week and avoid adding new recurring costs.`;
 }
 
 function buildAdviceReply(message: string, ctx: AIContext) {
@@ -364,6 +585,10 @@ function buildAdviceReply(message: string, ctx: AIContext) {
     lines.push(
       `Do not ignore your ${ctx.tasks.urgent} urgent task${ctx.tasks.urgent === 1 ? "" : "s"} while deciding; clear that pressure first.`,
     );
+  }
+
+  if (ctx.memories?.length) {
+    lines.push(`Relevant past context: ${clipMemory(ctx.memories[0], 120)}.`);
   }
 
   lines.push("If you want, I can turn that into a concrete plan or checklist.");
@@ -605,7 +830,7 @@ function inferAction(message: string): Record<string, unknown> | undefined {
   }
 
   const explicitExpenseMatch = normalized.match(
-    /(?:add|log)\s+(?:an?\s+)?expense(?:\s+of)?\s*\$?(\d+(?:\.\d{1,2})?)(?:\s+(?:for|on|in)\s+([a-zA-Z ]+))?(?:\s*[:-]\s*(.+))?/i,
+    /(?:add|log)\s+(?:an?\s+)?expense(?:\s+of)?\s*(?:(?:ksh|kes|shillings?)\s*)?\$?(\d+(?:\.\d{1,2})?)(?:\s*(?:ksh|kes|shillings?))?(?:\s+(?:for|on|in)\s+([a-zA-Z ]+))?(?:\s*[:-]\s*(.+))?/i,
   );
   if (explicitExpenseMatch) {
     return createExpenseAction(Number(explicitExpenseMatch[1]), normalized, {
@@ -615,7 +840,7 @@ function inferAction(message: string): Record<string, unknown> | undefined {
   }
 
   const explicitIncomeMatch = normalized.match(
-    /(?:add|log)\s+(?:an?\s+)?income(?:\s+of)?\s*\$?(\d+(?:\.\d{1,2})?)(?:\s+(?:for|from|in)\s+([a-zA-Z ]+))?(?:\s*[:-]\s*(.+))?/i,
+    /(?:add|log)\s+(?:an?\s+)?income(?:\s+of)?\s*(?:(?:ksh|kes|shillings?)\s*)?\$?(\d+(?:\.\d{1,2})?)(?:\s*(?:ksh|kes|shillings?))?(?:\s+(?:for|from|in)\s+([a-zA-Z ]+))?(?:\s*[:-]\s*(.+))?/i,
   );
   if (explicitIncomeMatch) {
     return createIncomeAction(Number(explicitIncomeMatch[1]), normalized, {
@@ -652,20 +877,10 @@ export function shouldUseLocalFastPath(messages: AIMessage[]) {
   const latestUserMessage = getLatestUserMessage(messages)?.trim() ?? "";
   if (!latestUserMessage) return true;
 
-  if (needsWebLookup(latestUserMessage)) {
-    return false;
-  }
-
-  if (inferAction(latestUserMessage)) {
-    return true;
-  }
-
-  return /summari[sz]e|my day|daily snapshot|daily summary|focus|priorit|what should i do|what next|spend|budget|money|finance|insight/i.test(
-    latestUserMessage,
-  );
+  return Boolean(inferAction(latestUserMessage));
 }
 
-function buildActionReply(action: Record<string, unknown>) {
+function buildActionReply(action: Record<string, unknown>, currency = "KES") {
   switch (action.action) {
     case "add_task":
       return `Adding **${String(action.title ?? "Untitled task")}** to your task list now.`;
@@ -679,7 +894,7 @@ function buildActionReply(action: Record<string, unknown>) {
             : undefined,
       );
 
-      return `Logged ${amount ? formatMoneyAmount(amount) : "that amount"} as an expense${target ? ` for ${target}` : ""}.`;
+      return `Logged ${amount ? formatMoneyAmount(amount, currency) : "that amount"} as an expense${target ? ` for ${target}` : ""}.`;
     }
     case "log_income": {
       const amount = toAmount(action.amount);
@@ -691,7 +906,7 @@ function buildActionReply(action: Record<string, unknown>) {
             : undefined,
       );
 
-      return `Logged ${amount ? formatMoneyAmount(amount) : "that amount"} as income${source ? ` from ${source}` : ""}.`;
+      return `Logged ${amount ? formatMoneyAmount(amount, currency) : "that amount"} as income${source ? ` from ${source}` : ""}.`;
     }
     case "add_habit":
       return `Adding **${String(action.name ?? "New habit")}** to your habit tracker now.`;
@@ -714,7 +929,7 @@ export async function localChat(
 
   if (action) {
     return {
-      content: buildActionReply(action),
+      content: buildActionReply(action, ctx.money?.currency ?? "KES"),
       action,
     };
   }
@@ -729,12 +944,28 @@ export async function localChat(
     };
   }
 
+  if (
+    /remember|earlier|previous|last time|did we|what did we|from my notes|my notes|based on my notes|continue from/i.test(
+      normalized,
+    )
+  ) {
+    return { content: buildMemoryRecallReply(ctx) };
+  }
+
   if (/summari[sz]e|my day|daily snapshot|daily summary/.test(normalized)) {
     return { content: buildSummaryReply(ctx) };
   }
 
   if (/focus|priorit|what should i do|what next/.test(normalized)) {
     return { content: buildFocusReply(ctx) };
+  }
+
+  if (
+    /plan|schedule|organi[sz]e my day|map my day|today plan|plan my day/.test(
+      normalized,
+    )
+  ) {
+    return { content: buildPlanningReply(ctx) };
   }
 
   if (/spend|budget|money|finance|insight/.test(normalized)) {
@@ -751,30 +982,95 @@ export async function localChat(
 
   return {
     content:
-      "I can advise, plan, summarize, search the web with sources, and record real actions. Try `look up the latest budgeting apps`, `I got $100 from Ali`, `summarize my day`, or `add task: review budget`.",
+      "I can advise, plan, summarize, search the web with sources, and record real actions. Try `look up the latest budgeting apps`, `I got KSh 1,000 from Ali`, `summarize my day`, or `add task: review budget`.",
   };
 }
 
 function buildSystemPrompt(ctx: AIContext): string {
-  return `You are Veritus AI, a sharp personal strategist and research assistant. Be practical, accurate, and direct.
+  const recentTasks =
+    ctx.tasks?.recent
+      ?.slice(0, 6)
+      .map((task) => `- ${describeTask(task)}`)
+      .join("\n") ?? "- No recent task data available.";
+  const recentTransactions =
+    ctx.money?.recent
+      ?.slice(0, 6)
+      .map(
+        (entry) =>
+          `- ${entry.type} ${formatMoneyAmount(entry.amount, ctx.money?.currency ?? "KES")} in ${entry.category}${entry.description ? ` (${entry.description})` : ""} on ${entry.date}`,
+      )
+      .join("\n") ?? "- No recent transaction data available.";
+  const recentGoals =
+    ctx.goals?.recent
+      ?.slice(0, 5)
+      .map(
+        (goal) =>
+          `- ${goal.title} at ${goal.progress}%${goal.deadline ? `, deadline ${goal.deadline}` : ""}${goal.category ? `, category ${goal.category}` : ""}`,
+      )
+      .join("\n") ?? "- No active goal data available.";
+  const recentHabits =
+    ctx.habits?.streaking
+      ?.slice(0, 5)
+      .map((habit) => `- ${habit.name}, streak ${habit.streak}`)
+      .join("\n") ?? "- No habit streak data available.";
+  const recentNotes =
+    ctx.recentNotes
+      ?.slice(0, 4)
+      .map((note) => `- ${note}`)
+      .join("\n") ?? "- No recent notes available.";
+  const retrievedMemories =
+    ctx.memories
+      ?.slice(0, 4)
+      .map(
+        (memory) =>
+          `- [${memory.source}] ${memory.title ? `${memory.title} — ` : ""}${clipMemory(memory, 220)} (from ${memory.createdAt})`,
+      )
+      .join("\n") ?? "- No retrieved long-term memory for this query.";
+
+  return `You are Veritus AI, a high-judgment personal strategist, researcher, and operator for one user. Be practical, accurate, and direct.
 
 Behavior:
-- Give concrete advice, tradeoffs, and next steps when the user asks for help deciding.
+- Lead with the best answer or recommendation, not warm-up filler.
+- Ground advice in the user's real context whenever possible: mention task titles, goal names, money pressure, note themes, or habits.
+- Use retrieved long-term memory from past chats and notes when it is relevant, but do not overclaim if the memory is weak or ambiguous.
 - If current web research is provided, use it and stay grounded in it.
 - Never pretend to have current information unless web research was supplied.
 - Ask one clarifying question only when it prevents a wrong answer.
-- Keep answers compact, but use bullets if comparison or structure helps.
+- For plans, give an ordered sequence.
+- For comparisons, give a recommendation and the tradeoff.
+- Use KSh wording whenever money is mentioned in Kenyan currency context.
+- Keep answers compact, but use bullets if structure helps.
 
 Context:
-${ctx.tasks ? `Tasks ${ctx.tasks.pending} pending, ${ctx.tasks.urgent} urgent.` : ""}
-${ctx.money ? `Money balance ${ctx.money.currency} ${ctx.money.balance.toFixed(2)}.` : ""}
+User: ${ctx.profile?.name ?? "Private workspace owner"}
+Today: ${ctx.today ?? "Unknown"}
+${ctx.tasks ? `Tasks ${ctx.tasks.pending} pending, ${ctx.tasks.urgent} urgent, ${ctx.tasks.inProgress ?? 0} in progress, ${ctx.tasks.focus ?? 0} in focus.` : ""}
+${ctx.money ? `Money balance ${ctx.money.currency} ${ctx.money.balance.toFixed(2)}. Income ${ctx.money.income ?? 0}. Expense ${ctx.money.expense ?? 0}.` : ""}
 ${ctx.habits ? `Habits ${ctx.habits.completedToday}/${ctx.habits.total} completed today.` : ""}
 ${ctx.goals ? `Goals ${ctx.goals.active} active.` : ""}
+
+Recent tasks:
+${recentTasks}
+
+Recent money:
+${recentTransactions}
+
+Recent goals:
+${recentGoals}
+
+Habit streaks:
+${recentHabits}
+
+Recent notes:
+${recentNotes}
+
+Retrieved memory relevant to this query:
+${retrievedMemories}
 
 If the user asks you to perform an action, output a JSON object first with one of these actions:
 add_task, log_expense, log_income, add_habit, add_goal, add_note.
 
-Treat natural money statements as actions too. Example: "I got $100 from Ali" should become log_income. "I spent $20 on lunch" should become log_expense.
+Treat natural money statements as actions too. Example: "I got KSh 1,000 from Ali" should become log_income. "I spent KSh 500 on lunch" should become log_expense.
 
 Then give one short confirmation sentence. For normal questions, answer directly in under 180 words.`;
 }
@@ -811,14 +1107,16 @@ export async function chat(
         ...messages,
       ],
       max_tokens: MAX_MODEL_TOKENS,
-      temperature: 0.45,
+      temperature: 0.35,
     });
 
     const rawContent = response.choices[0]?.message?.content ?? "";
     const action = extractAction(rawContent);
     const content =
       stripActionBlock(rawContent) ||
-      (action ? buildActionReply(action) : "I am ready for your next move.");
+      (action
+        ? buildActionReply(action, ctx.money?.currency ?? "KES")
+        : "I am ready for your next move.");
 
     return { content, action, sources };
   } catch {
@@ -838,8 +1136,8 @@ export async function generateInsight(prompt: string): Promise<string> {
     const response = await openai.chat.completions.create({
       model: MODEL,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 160,
-      temperature: 0.4,
+      max_tokens: 220,
+      temperature: 0.35,
     });
     return response.choices[0]?.message?.content ?? "";
   } catch {

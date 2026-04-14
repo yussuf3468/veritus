@@ -4,9 +4,10 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  Bot,
   LayoutDashboard,
   CheckSquare,
-  DollarSign,
+  Wallet,
   BookOpen,
   FileText,
   Activity,
@@ -28,6 +29,12 @@ const navItems = [
     description: "Your command view",
   },
   {
+    href: "/dashboard/ai",
+    icon: Bot,
+    label: "Veritus AI",
+    description: "Research and strategy",
+  },
+  {
     href: "/dashboard/tasks",
     icon: CheckSquare,
     label: "Tasks",
@@ -35,7 +42,7 @@ const navItems = [
   },
   {
     href: "/dashboard/money",
-    icon: DollarSign,
+    icon: Wallet,
     label: "Money",
     description: "Cashflow and savings",
   },
@@ -210,13 +217,13 @@ export function Sidebar() {
                   <p className="relative mt-2 text-xs leading-5 text-slate-400">
                     Add something new without leaving the board.
                   </p>
-                  <button
-                    onClick={() => setAIChat(true)}
+                  <Link
+                    href="/dashboard/ai"
                     className="relative mt-3 flex w-full items-center justify-between rounded-xl border border-brand-cyan/20 bg-brand-cyan/10 px-3 py-2.5 text-sm font-medium text-brand-cyan transition-colors hover:bg-brand-cyan/15"
                   >
-                    Open capture
+                    Open Veritus AI
                     <Zap size={16} />
-                  </button>
+                  </Link>
                 </motion.div>
               )}
             </AnimatePresence>

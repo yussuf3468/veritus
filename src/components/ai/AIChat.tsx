@@ -1,12 +1,14 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from "react";
+
+import Link from "next/link";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
   Send,
-  Zap,
   Loader2,
   Bot,
+  FileText,
   TrendingUp,
   ShoppingCart,
   BarChart3,
@@ -14,38 +16,116 @@ import {
   Trash2,
   Globe,
   ExternalLink,
+  Pin,
+  Sparkles,
+  Command,
+  ArrowUpRight,
+  Wand2,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import toast from "react-hot-toast";
 import { useUIStore } from "@/store/ui";
 import { useMoneyStore } from "@/store/money";
 import { useTaskStore } from "@/store/tasks";
 import { useHabitStore } from "@/store/habits";
 import { useGoalsStore } from "@/store/goals";
-import { cn } from "@/lib/utils";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import toast from "react-hot-toast";
+import { cn, formatCurrency } from "@/lib/utils";
 import type { Goal, Habit, Task, Transaction } from "@/types";
+
+type ActionPayload = { action?: string } & Record<string, unknown>;
+
+type MemoryItem = {
+  source: "chat" | "note";
+  title?: string;
+  content: string;
+  createdAt: string;
+};
+
+type SourceItem = {
+  title: string;
+  url: string;
+  snippet: string;
+  provider: string;
+};
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  action?: { action?: string } & Record<string, unknown>;
-  sources?: Array<{
-    title: string;
-    url: string;
-    snippet: string;
-    provider: string;
-  }>;
+  action?: ActionPayload;
+  memories?: MemoryItem[];
+  sources?: SourceItem[];
 }
 
+type AIChatProps = {
+  mode?: "overlay" | "page";
+};
+
+const STORAGE_KEY = "veritus-ai-chat-v1";
+const PINNED_PRESETS_KEY = "veritus-ai-pinned-presets-v1";
+const MAX_PINNED_PRESETS = 6;
+
 const SUGGESTION_ITEMS: { text: string; Icon: React.ElementType }[] = [
-  { text: "I got $100 from Ali", Icon: TrendingUp },
-  { text: "I spent $20 on groceries", Icon: ShoppingCart },
+  { text: "I got KSh 1,000 from Ali", Icon: TrendingUp },
+  { text: "I spent KSh 500 on groceries", Icon: ShoppingCart },
   { text: "Summarize my day", Icon: BarChart3 },
-  { text: "What should I focus on?", Icon: Target },
-  { text: "Look up the latest budgeting apps", Icon: Globe },
-  { text: "Research current mortgage rates", Icon: Globe },
+  { text: "What should I focus on first, and why?", Icon: Target },
+  { text: "Plan my day around my tasks and habits.", Icon: Target },
+  { text: "What did we decide about my budget last time?", Icon: FileText },
+  {
+    text: "Look up the latest budgeting apps and compare them.",
+    Icon: Globe,
+  },
+  { text: "Research current mortgage rates.", Icon: Globe },
+];
+
+const PRIMARY_AI_COMMANDS: Array<{
+  label: string;
+  hint: string;
+  description: string;
+  prompt: string;
+  Icon: React.ElementType;
+  tone: string;
+}> = [
+  {
+    label: "Prioritize",
+    hint: "Decision lane",
+    description: "Turn the current queue into the best next move.",
+    prompt: "What should I focus on first, and why?",
+    Icon: Target,
+    tone: "border-brand-cyan/18 bg-[radial-gradient(circle_at_top_left,rgba(0,212,255,0.16),transparent_45%),rgba(255,255,255,0.02)] text-brand-cyan",
+  },
+  {
+    label: "Recall",
+    hint: "Persistent memory",
+    description: "Pull back relevant chat and note context instantly.",
+    prompt: "What did we decide about my budget last time?",
+    Icon: FileText,
+    tone: "border-amber-400/18 bg-[radial-gradient(circle_at_top_left,rgba(251,191,36,0.14),transparent_45%),rgba(255,255,255,0.02)] text-amber-200",
+  },
+  {
+    label: "Research",
+    hint: "Live web",
+    description: "Ground the answer in current external sources.",
+    prompt: "Look up the latest budgeting apps and compare them.",
+    Icon: Globe,
+    tone: "border-fuchsia-400/18 bg-[radial-gradient(circle_at_top_left,rgba(192,132,252,0.16),transparent_45%),rgba(255,255,255,0.02)] text-fuchsia-200",
+  },
+  {
+    label: "Operate",
+    hint: "Action engine",
+    description: "Turn advice into tasks, plans, and saved actions.",
+    prompt: "Plan my day around my tasks and habits.",
+    Icon: Wand2,
+    tone: "border-emerald-400/18 bg-[radial-gradient(circle_at_top_left,rgba(52,211,153,0.16),transparent_45%),rgba(255,255,255,0.02)] text-emerald-200",
+  },
+];
+
+const DEFAULT_PINNED_PROMPTS = [
+  "What should I focus on first, and why?",
+  "What did we decide about my budget last time?",
+  "Summarize my current system health across tasks, money, and goals.",
 ];
 
 const DEFAULT_MESSAGES: Message[] = [
@@ -53,10 +133,47 @@ const DEFAULT_MESSAGES: Message[] = [
     id: "welcome",
     role: "assistant",
     content:
-      'Hi! I\'m your Veritus AI. I can advise, summarize your day, search the web with sources, add tasks, and record real money activity from normal language. Try **"look up the latest budgeting apps"**, **"I got $100 from Ali"**, or **"What should I focus on?"**.',
+      'Hi! I\'m your Veritus AI. I can advise, summarize your day, search the web with sources, pull relevant memories from past chats and notes, add tasks, and record money activity from normal language. Try **"what did we decide about my budget last time?"**, **"I got KSh 1,000 from Ali"**, or **"What should I focus on first, and why?"**.',
   },
 ];
-const STORAGE_KEY = "veritus-ai-chat-v1";
+
+function createMessageId() {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function normalizePinnedPrompts(prompts: string[]) {
+  return Array.from(
+    new Set(prompts.map((prompt) => prompt.trim()).filter(Boolean)),
+  ).slice(0, MAX_PINNED_PRESETS);
+}
+
+function normalizeLoadedMessages(messages: Message[]) {
+  const cleaned = messages.filter(
+    (message) => message.role === "user" || message.role === "assistant",
+  );
+
+  return cleaned.length > 0
+    ? [DEFAULT_MESSAGES[0], ...cleaned]
+    : DEFAULT_MESSAGES;
+}
+
+function formatMemoryDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Saved memory";
+
+  return new Intl.DateTimeFormat("en-KE", {
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+function formatMemoryPreview(value: string, length = 110) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= length) return normalized;
+  return `${normalized.slice(0, length - 3).trimEnd()}...`;
+}
 
 function formatActionAmount(value: unknown) {
   const amount =
@@ -68,15 +185,10 @@ function formatActionAmount(value: unknown) {
 
   if (!Number.isFinite(amount)) return null;
 
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  return formatCurrency(amount, "KES");
 }
 
-function getActionBadges(action?: Message["action"]) {
+function getActionBadges(action?: ActionPayload) {
   if (!action?.action) return [] as string[];
 
   const badges = [String(action.action).replace(/_/g, " ")];
@@ -102,6 +214,7 @@ function getActionBadges(action?: Message["action"]) {
       break;
     case "add_task":
     case "add_goal":
+    case "add_note":
       if (typeof action.title === "string" && action.title) {
         badges.push(action.title);
       }
@@ -116,8 +229,9 @@ function getActionBadges(action?: Message["action"]) {
   return badges;
 }
 
-export function AIChat() {
-  const { aiChatOpen, toggleAIChat, setAIChat } = useUIStore();
+export function AIChat({ mode = "overlay" }: AIChatProps) {
+  const isPage = mode === "page";
+  const { aiChatOpen, setAIChat } = useUIStore();
   const addTransaction = useMoneyStore((state) => state.addTransaction);
   const addTask = useTaskStore((state) => state.addTask);
   const addHabit = useHabitStore((state) => state.addHabit);
@@ -126,8 +240,52 @@ export function AIChat() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [composerFocused, setComposerFocused] = useState(false);
+  const [pinnedPrompts, setPinnedPrompts] = useState<string[]>(
+    DEFAULT_PINNED_PROMPTS,
+  );
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const hasConversation = useMemo(
+    () => messages.some((message) => message.id !== "welcome"),
+    [messages],
+  );
+
+  const latestAssistantMessage = useMemo(
+    () =>
+      [...messages]
+        .reverse()
+        .find(
+          (message) => message.role === "assistant" && message.id !== "welcome",
+        ) ?? null,
+    [messages],
+  );
+
+  const latestSources = latestAssistantMessage?.sources ?? [];
+  const latestMemories = latestAssistantMessage?.memories ?? [];
+  const latestActionBadges = latestAssistantMessage?.action
+    ? getActionBadges(latestAssistantMessage.action)
+    : [];
+  const draftIsPinned = !!input.trim() && pinnedPrompts.includes(input.trim());
+
+  const sessionStats = useMemo(
+    () => ({
+      messages: Math.max(messages.length - 1, 0),
+      memories: messages.reduce(
+        (sum, message) => sum + (message.memories?.length ?? 0),
+        0,
+      ),
+      sources: messages.reduce(
+        (sum, message) => sum + (message.sources?.length ?? 0),
+        0,
+      ),
+      actions: messages.reduce(
+        (sum, message) => sum + (message.action?.action ? 1 : 0),
+        0,
+      ),
+    }),
+    [messages],
+  );
 
   const resizeComposer = useCallback((element?: HTMLTextAreaElement | null) => {
     if (!element) return;
@@ -135,17 +293,85 @@ export function AIChat() {
     element.style.height = `${Math.min(element.scrollHeight, 144)}px`;
   }, []);
 
-  const clearChat = useCallback(() => {
+  const focusComposer = useCallback(() => {
+    inputRef.current?.focus();
+    resizeComposer(inputRef.current);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [resizeComposer]);
+
+  const prefillPrompt = useCallback(
+    (prompt: string) => {
+      setInput(prompt);
+      window.requestAnimationFrame(() => {
+        focusComposer();
+      });
+    },
+    [focusComposer],
+  );
+
+  const togglePinnedPrompt = useCallback((prompt: string) => {
+    const cleanedPrompt = prompt.trim();
+    if (!cleanedPrompt) return;
+
+    setPinnedPrompts((current) => {
+      if (current.includes(cleanedPrompt)) {
+        return current.filter((item) => item !== cleanedPrompt);
+      }
+
+      return normalizePinnedPrompts([cleanedPrompt, ...current]);
+    });
+  }, []);
+
+  const clearChat = useCallback(async () => {
     setMessages(DEFAULT_MESSAGES);
+    setInput("");
     try {
       window.localStorage.removeItem(STORAGE_KEY);
     } catch {
-      // ignore
+      // Ignore storage failures.
+    }
+
+    try {
+      const res = await fetch("/api/ai", { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      toast.success("AI memory cleared");
+    } catch {
+      toast.error(
+        "Local chat cleared, but server history could not be removed.",
+      );
+    }
+  }, []);
+
+  const loadRemoteHistory = useCallback(async () => {
+    try {
+      const res = await fetch("/api/ai?limit=24", { cache: "no-store" });
+      if (!res.ok) return;
+
+      const json = await res.json();
+      const remoteMessages = Array.isArray(json.data?.messages)
+        ? (json.data.messages as Message[])
+        : [];
+
+      if (remoteMessages.length === 0) return;
+
+      setMessages((current) => {
+        const currentConversation = current.filter(
+          (message) => message.id !== "welcome",
+        );
+
+        if (currentConversation.length > remoteMessages.length) {
+          return current;
+        }
+
+        return normalizeLoadedMessages(remoteMessages);
+      });
+    } catch {
+      // Ignore remote history failures.
     }
   }, []);
 
   const syncActionResult = useCallback(
-    (action: Message["action"], actionResult: unknown) => {
+    (action: ActionPayload | undefined, actionResult: unknown) => {
       if (!action?.action || !actionResult) return;
 
       switch (action.action) {
@@ -167,6 +393,120 @@ export function AIChat() {
     [addGoal, addHabit, addTask, addTransaction],
   );
 
+  const send = useCallback(
+    async (override?: string) => {
+      const content = (override ?? input).trim();
+      if (!content || loading) return;
+
+      const userMessage: Message = {
+        id: createMessageId(),
+        role: "user",
+        content,
+      };
+
+      const outgoingMessages = [
+        ...messages
+          .filter((message) => message.id !== "welcome")
+          .map(({ role, content: previousContent }) => ({
+            role,
+            content: previousContent,
+          })),
+        { role: "user" as const, content },
+      ];
+
+      setMessages((current) =>
+        normalizeLoadedMessages([
+          ...current.filter((message) => message.id !== "welcome"),
+          userMessage,
+        ]),
+      );
+      setInput("");
+      window.requestAnimationFrame(() => {
+        resizeComposer(inputRef.current);
+      });
+      setLoading(true);
+
+      try {
+        const res = await fetch("/api/ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: outgoingMessages }),
+        });
+
+        const json = await res.json();
+        if (!res.ok) {
+          throw new Error(
+            typeof json.error === "string"
+              ? json.error
+              : "Unable to reach Veritus AI right now.",
+          );
+        }
+
+        const data = json.data ?? {};
+        const assistantMessage: Message = {
+          id: createMessageId(),
+          role: "assistant",
+          content:
+            typeof data.content === "string" && data.content.trim()
+              ? data.content
+              : "I reached the AI route, but the reply was empty.",
+          action:
+            data.action && typeof data.action === "object"
+              ? (data.action as ActionPayload)
+              : undefined,
+          memories: Array.isArray(data.memories)
+            ? (data.memories as MemoryItem[])
+            : undefined,
+          sources: Array.isArray(data.sources)
+            ? (data.sources as SourceItem[])
+            : undefined,
+        };
+
+        setMessages((current) =>
+          normalizeLoadedMessages([
+            ...current.filter((message) => message.id !== "welcome"),
+            assistantMessage,
+          ]),
+        );
+
+        syncActionResult(assistantMessage.action, data.actionResult);
+
+        if (data.actionError && typeof data.actionError === "string") {
+          toast.error(data.actionError);
+        } else if (assistantMessage.action?.action && data.actionResult) {
+          toast.success("Veritus AI updated your workspace.");
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : "Unable to reach Veritus AI right now.";
+
+        setMessages((current) =>
+          normalizeLoadedMessages([
+            ...current.filter((entry) => entry.id !== "welcome"),
+            {
+              id: createMessageId(),
+              role: "assistant",
+              content: `I hit a problem while processing that request. ${message}`,
+            },
+          ]),
+        );
+        toast.error(message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [input, loading, messages, resizeComposer, syncActionResult],
+  );
+
+  const handlePromptTrigger = useCallback(
+    (prompt: string) => {
+      prefillPrompt(prompt);
+    },
+    [prefillPrompt],
+  );
+
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
@@ -174,7 +514,7 @@ export function AIChat() {
 
       const parsed = JSON.parse(saved) as Message[];
       if (Array.isArray(parsed) && parsed.length > 0) {
-        setMessages(parsed);
+        setMessages(normalizeLoadedMessages(parsed));
       }
     } catch {
       // Ignore invalid local history.
@@ -183,9 +523,29 @@ export function AIChat() {
 
   useEffect(() => {
     try {
+      const saved = window.localStorage.getItem(PINNED_PRESETS_KEY);
+      if (!saved) return;
+
+      const parsed = JSON.parse(saved) as string[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setPinnedPrompts(normalizePinnedPrompts(parsed));
+      }
+    } catch {
+      // Ignore invalid preset storage.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRemoteHistory();
+  }, [loadRemoteHistory]);
+
+  useEffect(() => {
+    try {
       window.localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify(messages.slice(-20)),
+        JSON.stringify(
+          messages.filter((message) => message.id !== "welcome").slice(-40),
+        ),
       );
     } catch {
       // Ignore storage failures.
@@ -193,537 +553,882 @@ export function AIChat() {
   }, [messages]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  useEffect(() => {
-    if (aiChatOpen) {
-      const timeout = window.setTimeout(() => {
-        inputRef.current?.focus();
-        resizeComposer(inputRef.current);
-      }, 120);
-      return () => window.clearTimeout(timeout);
+    try {
+      window.localStorage.setItem(
+        PINNED_PRESETS_KEY,
+        JSON.stringify(pinnedPrompts),
+      );
+    } catch {
+      // Ignore storage failures.
     }
-  }, [aiChatOpen, resizeComposer]);
+  }, [pinnedPrompts]);
 
   useEffect(() => {
-    if (!aiChatOpen) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [aiChatOpen]);
+    window.requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    });
+  }, [messages, loading]);
 
   useEffect(() => {
-    if (!aiChatOpen) return;
+    resizeComposer(inputRef.current);
+  }, [input, resizeComposer]);
 
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const overlayActive = !isPage && aiChatOpen;
+      const workspaceActive = isPage || overlayActive;
+      if (!workspaceActive) return;
+
+      const isModifier = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+
+      if (!isPage && aiChatOpen && event.key === "Escape") {
+        event.preventDefault();
         setAIChat(false);
+        return;
+      }
+
+      if (isModifier && key === "k") {
+        event.preventDefault();
+        focusComposer();
+        return;
+      }
+
+      if (isModifier && event.key === "Enter") {
+        if (!loading && input.trim()) {
+          event.preventDefault();
+          void send();
+        }
+        return;
+      }
+
+      if (isModifier && event.shiftKey && key === "p") {
+        if (input.trim()) {
+          event.preventDefault();
+          togglePinnedPrompt(input.trim());
+        }
+        return;
+      }
+
+      if (isModifier && /^[1-4]$/.test(event.key)) {
+        const commandIndex = Number(event.key) - 1;
+        const command = PRIMARY_AI_COMMANDS[commandIndex];
+        if (!command) return;
+
+        event.preventDefault();
+        prefillPrompt(command.prompt);
       }
     };
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [aiChatOpen, setAIChat]);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    aiChatOpen,
+    focusComposer,
+    input,
+    isPage,
+    loading,
+    prefillPrompt,
+    send,
+    setAIChat,
+    togglePinnedPrompt,
+  ]);
 
-  const send = useCallback(
-    async (text?: string) => {
-      const content = (text ?? input).trim();
-      if (!content || loading) return;
-
-      const userMsg: Message = {
-        id: Date.now().toString(),
-        role: "user",
-        content,
-      };
-      const history = [...messages, userMsg]
-        .filter((m) => m.id !== "welcome")
-        .slice(-6)
-        .map((m) => ({ role: m.role, content: m.content }));
-
-      setInput("");
-      if (inputRef.current) {
-        inputRef.current.style.height = "24px";
-      }
-      setMessages((prev) => [...prev, userMsg]);
-      setLoading(true);
-
-      try {
-        const res = await fetch("/api/ai", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: history }),
-        });
-
-        const json = await res.json();
-        if (res.status === 401) {
-          throw new Error("Your session expired. Please sign in again.");
-        }
-        if (!res.ok) throw new Error(json.error ?? "AI error");
-
-        const {
-          content: aiContent,
-          action,
-          actionResult,
-          actionError,
-          sources,
-        } = json.data;
-
-        const assistantMsg: Message = {
-          id: Date.now().toString() + "_ai",
-          role: "assistant",
-          content: aiContent,
-          action,
-          sources,
-        };
-
-        setMessages((prev) => [...prev, assistantMsg]);
-        syncActionResult(action, actionResult);
-
-        // Show toast if action was executed
-        if (actionResult) {
-          const actionLabels: Record<string, string> = {
-            add_task: "✅ Task added",
-            log_expense: "💸 Expense logged",
-            log_income: "💰 Income logged",
-            add_habit: "⭐ Habit added",
-            add_goal: "🎯 Goal created",
-            add_note: "📝 Note saved",
-          };
-          const label = actionLabels[action?.action as string];
-          if (label) toast.success(label);
-        } else if (actionError) {
-          toast.error(actionError);
-        }
-      } catch (err) {
-        const errMsg =
-          err instanceof Error ? err.message : "Something went wrong";
-        toast.error(errMsg);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString() + "_err",
-            role: "assistant",
-            content: `Sorry, I ran into an error: ${errMsg}`,
-          },
-        ]);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [input, loading, messages, syncActionResult],
+  const pinnedPromptStrip = pinnedPrompts.length > 0 && (
+    <motion.div
+      layout
+      className="space-y-2"
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+    >
+      <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
+        <Pin size={11} className="text-brand-cyan/70" />
+        Pinned Presets
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {pinnedPrompts.map((prompt) => (
+          <div
+            key={prompt}
+            className="flex items-center gap-1 rounded-full border border-white/8 bg-white/[0.04] pr-1 text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+          >
+            <button
+              onClick={() => prefillPrompt(prompt)}
+              className="max-w-[240px] truncate px-3 py-1.5 text-[11px] transition-colors hover:text-white"
+            >
+              {prompt}
+            </button>
+            <button
+              onClick={() => togglePinnedPrompt(prompt)}
+              className="rounded-full border border-transparent p-1 text-slate-500 transition-colors hover:border-white/8 hover:bg-white/[0.05] hover:text-white"
+              aria-label={`Unpin ${prompt}`}
+            >
+              <Pin size={11} className="fill-current" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </motion.div>
   );
 
-  return (
-    <>
-      {/* Backdrop */}
-      <AnimatePresence>
-        {aiChatOpen && (
-          <motion.button
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setAIChat(false)}
-            className="fixed inset-0 z-40 bg-slate-950/72 backdrop-blur-[6px]"
-            aria-label="Close AI assistant"
-          />
-        )}
-      </AnimatePresence>
+  const conversationThread = (
+    <div className="space-y-4">
+      {!hasConversation && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={cn(
+            "overflow-hidden rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+            isPage ? "p-5" : "p-4",
+          )}
+        >
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-brand-cyan/20 bg-brand-cyan/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-brand-cyan">
+                <Sparkles size={11} />
+                {isPage ? "Thread Stage" : "Mobile AI Deck"}
+              </div>
+              <h2 className="mt-3 text-xl font-semibold tracking-tight text-white sm:text-[26px] sm:leading-[1.15]">
+                {isPage
+                  ? "Choose a reasoning lane, then shape the prompt before you send it."
+                  : "Ask fast, pin the prompts you reuse, and keep the whole session in view."}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-400">
+                Veritus AI now keeps memory, source cards, and action signals
+                visible so the workspace feels continuous instead of disposable.
+              </p>
+            </div>
 
-      {/* Panel */}
-      <AnimatePresence>
-        {aiChatOpen && (
-          <motion.section
-            initial={{ opacity: 0, y: 32, scale: 0.94 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.97 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[rgba(7,8,18,0.99)] overscroll-none md:inset-auto md:bottom-5 md:right-5 md:left-auto md:top-auto md:h-[min(760px,calc(100vh-4rem))] md:w-[480px] md:rounded-[30px] md:border md:border-white/[0.07] md:backdrop-blur-2xl md:shadow-[0_40px_100px_rgba(0,0,0,0.72),0_0_0_1px_rgba(255,255,255,0.05),inset_0_1px_0_rgba(255,255,255,0.07)]"
-            style={{
-              paddingTop: "env(safe-area-inset-top)",
-              paddingBottom: "env(safe-area-inset-bottom)",
-            }}
+            <div className="grid gap-2 sm:grid-cols-3 lg:w-[360px]">
+              {[
+                {
+                  label: "Session",
+                  value: String(sessionStats.messages),
+                  note: "messages",
+                },
+                {
+                  label: "Memory",
+                  value: String(sessionStats.memories),
+                  note: "recall hits",
+                },
+                {
+                  label: "Sources",
+                  value: String(sessionStats.sources),
+                  note: "citations",
+                },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-[18px] border border-white/8 bg-black/20 px-3 py-3"
+                >
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                    {item.label}
+                  </div>
+                  <div className="mt-2 text-lg font-semibold text-white">
+                    {item.value}
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-500">
+                    {item.note}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      <AnimatePresence initial={false}>
+        {messages.map((message) => (
+          <motion.div
+            key={message.id}
+            layout
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.18 }}
+            className={cn(
+              "flex gap-2.5",
+              message.role === "user" ? "flex-row-reverse" : "flex-row",
+            )}
           >
-            {/* Ambient glow blobs */}
-            <div className="pointer-events-none absolute inset-0 overflow-hidden md:rounded-[30px]">
-              <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-brand-purple/16 blur-[80px]" />
-              <div className="absolute -left-12 -top-6 h-48 w-48 rounded-full bg-brand-cyan/10 blur-[70px]" />
-            </div>
-            {/* Top highlight stripe — desktop only */}
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 hidden h-px bg-gradient-to-r from-transparent via-brand-cyan/45 to-transparent md:block" />
-
-            {/* ── Header ─────────────────────────────── */}
-            <div className="relative flex items-center gap-3 border-b border-white/6 px-4 py-3.5 md:px-5">
-              {/* Avatar with pulse ring when thinking */}
-              <div className="relative flex-shrink-0">
-                <AnimatePresence>
-                  {loading && (
-                    <motion.div
-                      key="pulse-ring"
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1.35 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      transition={{
-                        duration: 0.4,
-                        repeat: Infinity,
-                        repeatType: "reverse",
-                      }}
-                      className="absolute inset-0 rounded-2xl bg-brand-cyan/20 blur-[6px]"
-                    />
-                  )}
-                </AnimatePresence>
-                <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-cyan via-[#7c3aed] to-brand-purple shadow-[0_0_18px_rgba(0,212,255,0.22)]">
-                  <Bot size={15} className="text-white" />
-                </div>
+            {message.role === "assistant" && (
+              <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-cyan to-brand-purple shadow-[0_0_10px_rgba(0,212,255,0.18)]">
+                <Bot size={12} className="text-white" />
               </div>
+            )}
 
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-white">Veritus AI</p>
-                  {/* Animated status badge */}
-                  <motion.div
-                    key={loading ? "thinking" : "ready"}
-                    initial={{ opacity: 0, scale: 0.85 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className={cn(
-                      "flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
-                      loading
-                        ? "border-amber-500/25 bg-amber-500/10 text-amber-400"
-                        : "border-emerald-500/25 bg-emerald-500/10 text-emerald-400",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "h-1.5 w-1.5 rounded-full",
-                        loading
-                          ? "animate-pulse bg-amber-400"
-                          : "bg-emerald-400",
-                      )}
-                    />
-                    {loading ? "Thinking…" : "Ready"}
-                  </motion.div>
-                </div>
-                <p className="truncate text-[11px] text-slate-500">
-                  Money · Tasks · Habits · Goals
-                </p>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                {/* Clear chat */}
-                <button
-                  onClick={clearChat}
-                  title="Clear chat"
-                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/6 bg-white/3 text-slate-500 transition-all hover:border-rose-500/30 hover:bg-rose-500/8 hover:text-rose-400"
-                >
-                  <Trash2 size={13} />
-                </button>
-                {/* Close */}
-                <button
-                  onClick={() => setAIChat(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/6 bg-white/3 text-slate-400 transition-all hover:border-white/14 hover:bg-white/7 hover:text-white"
-                  aria-label="Close AI assistant"
-                >
-                  <X size={15} />
-                </button>
-              </div>
-            </div>
-
-            {/* ── Messages ───────────────────────────── */}
-            <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-5 [scrollbar-color:rgba(255,255,255,0.07)_transparent] [scrollbar-width:thin] md:px-5">
-              {/* Suggestion grid */}
-              <div className="mb-5 grid grid-cols-2 gap-2">
-                {SUGGESTION_ITEMS.map(({ text, Icon }) => (
-                  <button
-                    key={text}
-                    onClick={() => send(text)}
-                    disabled={loading}
-                    className="flex items-start gap-2 rounded-[14px] border border-white/6 bg-white/[0.03] px-3 py-2.5 text-left transition-all hover:border-brand-cyan/22 hover:bg-brand-cyan/5 disabled:pointer-events-none disabled:opacity-40"
-                  >
-                    <Icon
-                      size={12}
-                      className="mt-0.5 flex-shrink-0 text-brand-cyan/55"
-                    />
-                    <span className="text-[11px] leading-snug text-slate-400">
-                      {text}
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Chat divider */}
-              <div className="mb-5 flex items-center gap-2">
-                <div className="h-px flex-1 bg-white/[0.05]" />
-                <span className="text-[10px] font-medium tracking-wide text-slate-600">
-                  CONVERSATION
-                </span>
-                <div className="h-px flex-1 bg-white/[0.05]" />
-              </div>
-
-              <div className="space-y-4">
-                {messages.map((msg) => (
-                  <motion.div
-                    key={msg.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.18 }}
-                    className={cn(
-                      "flex gap-2.5",
-                      msg.role === "user" ? "flex-row-reverse" : "flex-row",
-                    )}
-                  >
-                    {msg.role === "assistant" && (
-                      <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-cyan to-brand-purple shadow-[0_0_10px_rgba(0,212,255,0.18)]">
-                        <Bot size={11} className="text-white" />
-                      </div>
-                    )}
-                    <div className="max-w-[88%] space-y-2">
-                      <div
-                        className={cn(
-                          "break-words rounded-[18px] px-3.5 py-2.5 text-[13px] leading-[1.7] prose-veritus [&_p]:m-0",
-                          msg.role === "user"
-                            ? "rounded-tr-[5px] border border-brand-cyan/22 bg-gradient-to-br from-brand-cyan/18 to-brand-purple/12 text-white"
-                            : "rounded-tl-[5px] border border-white/6 bg-white/[0.04] text-slate-200",
-                        )}
-                      >
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {msg.content}
-                        </ReactMarkdown>
-                      </div>
-                      {msg.action?.action && (
-                        <div className="flex flex-wrap gap-1.5 px-0.5">
-                          {getActionBadges(msg.action).map((badge, i) => (
-                            <span
-                              key={`${msg.id}-${badge}`}
-                              className={cn(
-                                "rounded-full px-2 py-0.5 text-[10px] font-medium",
-                                i === 0
-                                  ? "border border-brand-cyan/28 bg-brand-cyan/12 text-brand-cyan"
-                                  : "border border-white/7 bg-white/4 text-slate-400",
-                              )}
-                            >
-                              {badge}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {msg.sources && msg.sources.length > 0 && (
-                        <div className="space-y-2 px-0.5">
-                          <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">
-                            <Globe size={11} className="text-brand-cyan/70" />
-                            Sources
-                          </div>
-                          <div className="grid gap-2">
-                            {msg.sources.map((source) => (
-                              <a
-                                key={`${msg.id}-${source.url}`}
-                                href={source.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="group rounded-[16px] border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 transition-all hover:border-brand-cyan/20 hover:bg-brand-cyan/[0.04]"
-                              >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0 flex-1">
-                                    <div className="truncate text-[11px] font-medium text-slate-200 group-hover:text-white">
-                                      {source.title}
-                                    </div>
-                                    <div className="mt-1 line-clamp-2 text-[10px] leading-5 text-slate-500">
-                                      {source.snippet}
-                                    </div>
-                                  </div>
-                                  <div className="flex flex-shrink-0 items-center gap-1 rounded-full border border-white/[0.06] bg-white/[0.03] px-1.5 py-1 text-[9px] uppercase tracking-[0.14em] text-slate-500">
-                                    {source.provider}
-                                    <ExternalLink size={10} />
-                                  </div>
-                                </div>
-                              </a>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                ))}
-
-                {/* Typing indicator */}
-                {loading && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex gap-2.5"
-                  >
-                    <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-cyan to-brand-purple shadow-[0_0_10px_rgba(0,212,255,0.2)]">
-                      <Bot size={11} className="text-white" />
-                    </div>
-                    <div className="flex items-center gap-1.5 rounded-[18px] rounded-tl-[5px] border border-white/6 bg-white/[0.04] px-4 py-3.5">
-                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-500 [animation-delay:0ms]" />
-                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-500 [animation-delay:150ms]" />
-                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-500 [animation-delay:300ms]" />
-                    </div>
-                  </motion.div>
-                )}
-
-                <div ref={bottomRef} />
-              </div>
-            </div>
-
-            {/* ── Composer ───────────────────────────── */}
             <div
-              className="relative border-t border-white/6 px-3 pt-3 md:px-4"
-              style={{
-                paddingBottom: "calc(env(safe-area-inset-bottom) + 0.75rem)",
-              }}
+              className={cn(
+                "space-y-2",
+                isPage ? "max-w-[92%] lg:max-w-[84%]" : "max-w-[88%]",
+              )}
             >
               <div
                 className={cn(
-                  "relative overflow-hidden rounded-[24px] border transition-all duration-200",
-                  composerFocused
-                    ? "border-brand-cyan/35 bg-[linear-gradient(180deg,rgba(16,20,36,0.98),rgba(8,10,22,0.98))] shadow-[0_0_0_1px_rgba(0,212,255,0.08),0_18px_38px_rgba(0,0,0,0.28)]"
-                    : "border-white/[0.08] bg-[linear-gradient(180deg,rgba(13,15,28,0.98),rgba(8,10,20,0.98))] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
+                  "break-words rounded-[20px] px-4 py-3 text-[13px] leading-[1.8] prose-veritus [&_p]:m-0",
+                  message.role === "user"
+                    ? "rounded-tr-[6px] border border-brand-cyan/22 bg-gradient-to-br from-brand-cyan/18 via-brand-cyan/10 to-brand-purple/12 text-white shadow-[0_14px_32px_rgba(0,212,255,0.08)]"
+                    : "rounded-tl-[6px] border border-white/7 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.03))] text-slate-200 shadow-[0_16px_36px_rgba(0,0,0,0.18)]",
                 )}
               >
-                <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-cyan/35 to-transparent" />
-                <div className="flex items-end gap-3 px-3.5 py-3">
-                  <div
-                    className={cn(
-                      "mb-1 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[16px] border transition-all",
-                      composerFocused
-                        ? "border-brand-cyan/20 bg-brand-cyan/10 text-brand-cyan shadow-[0_0_16px_rgba(0,212,255,0.1)]"
-                        : "border-white/[0.06] bg-white/[0.03] text-slate-500",
-                    )}
-                  >
-                    <Bot size={14} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1.5 flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                        Ask Veritus AI
-                      </span>
-                      {input.length > 0 && (
-                        <span
-                          className={cn(
-                            "text-[10px] tabular-nums",
-                            input.length > 450
-                              ? "text-rose-400"
-                              : "text-slate-600",
-                          )}
-                        >
-                          {input.length}/500
-                        </span>
-                      )}
-                    </div>
-                    <div
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {message.content}
+                </ReactMarkdown>
+              </div>
+
+              {message.action?.action && (
+                <div className="flex flex-wrap gap-1.5 px-0.5">
+                  {getActionBadges(message.action).map((badge, index) => (
+                    <span
+                      key={`${message.id}-${badge}`}
                       className={cn(
-                        "overflow-hidden rounded-[18px] border bg-[rgba(4,7,18,0.7)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-all duration-200",
-                        composerFocused
-                          ? "border-brand-cyan/30 shadow-[0_0_0_1px_rgba(0,212,255,0.06),inset_0_1px_0_rgba(255,255,255,0.04)]"
-                          : "border-white/[0.06]",
+                        "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                        index === 0
+                          ? "border border-brand-cyan/28 bg-brand-cyan/12 text-brand-cyan"
+                          : "border border-white/7 bg-white/4 text-slate-400",
                       )}
                     >
-                      <textarea
-                        ref={inputRef}
-                        value={input}
-                        onChange={(e) => {
-                          setInput(e.target.value);
-                          resizeComposer(e.currentTarget);
-                        }}
-                        onFocus={() => setComposerFocused(true)}
-                        onBlur={() => setComposerFocused(false)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            send();
-                          }
-                        }}
-                        rows={1}
-                        maxLength={500}
-                        placeholder="Ask anything. I can log money, create tasks, and plan your day."
-                        className="max-h-36 min-h-[52px] w-full resize-none overflow-y-auto bg-transparent px-4 py-3 text-[14px] leading-6 text-white placeholder-slate-600 outline-none"
-                        disabled={loading}
-                      />
-                    </div>
+                      {badge}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {message.memories && message.memories.length > 0 && (
+                <div className="space-y-2 px-0.5">
+                  <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">
+                    <Bot size={11} className="text-brand-cyan/70" />
+                    Memory Used
                   </div>
-                  <div className="relative mb-1 flex-shrink-0">
-                    {input.trim() && !loading && (
-                      <span className="absolute inset-0 rounded-[18px] bg-brand-cyan/16 blur-[10px]" />
-                    )}
-                    <button
-                      onClick={() => send()}
-                      disabled={!input.trim() || loading}
-                      className={cn(
-                        "relative flex h-11 w-11 items-center justify-center rounded-[18px] transition-all duration-150",
-                        input.trim() && !loading
-                          ? "bg-gradient-to-br from-brand-cyan to-brand-purple text-white shadow-[0_0_20px_rgba(0,212,255,0.28)] hover:scale-[1.03] hover:shadow-[0_0_28px_rgba(0,212,255,0.38)]"
-                          : "cursor-not-allowed bg-white/[0.04] text-slate-700",
-                      )}
-                    >
-                      {loading ? (
-                        <Loader2
-                          size={15}
-                          className="animate-spin text-brand-cyan"
-                        />
-                      ) : (
-                        <Send size={15} />
-                      )}
-                    </button>
+                  <div className="flex flex-wrap gap-2">
+                    {message.memories.map((memory, index) => (
+                      <div
+                        key={`${message.id}-memory-${index}-${memory.createdAt}`}
+                        className="max-w-[260px] rounded-[16px] border border-white/[0.06] bg-white/[0.03] px-3 py-2.5"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.12em]",
+                              memory.source === "note"
+                                ? "border-amber-400/20 bg-amber-400/10 text-amber-200"
+                                : "border-brand-cyan/20 bg-brand-cyan/10 text-brand-cyan",
+                            )}
+                          >
+                            {memory.source === "note" ? (
+                              <FileText size={10} />
+                            ) : (
+                              <Bot size={10} />
+                            )}
+                            {memory.source}
+                          </span>
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-slate-600">
+                            {formatMemoryDate(memory.createdAt)}
+                          </span>
+                        </div>
+                        {memory.title && (
+                          <div className="mt-2 text-[11px] font-medium text-slate-200">
+                            {memory.title}
+                          </div>
+                        )}
+                        <div className="mt-1 text-[10px] leading-5 text-slate-500">
+                          {formatMemoryPreview(memory.content)}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              </div>
-              <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-slate-600">
-                <span>
-                  <kbd className="font-mono text-slate-700">Enter</kbd> to send
-                  · <kbd className="font-mono text-slate-700">Shift+Enter</kbd>{" "}
-                  for newline
-                </span>
-                <span className="hidden sm:inline">
-                  Natural language works best
-                </span>
-              </div>
+              )}
+
+              {message.sources && message.sources.length > 0 && (
+                <div className="space-y-2 px-0.5">
+                  <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">
+                    <Globe size={11} className="text-brand-cyan/70" />
+                    Sources
+                  </div>
+                  <div className="grid gap-2">
+                    {message.sources.map((source) => (
+                      <a
+                        key={`${message.id}-${source.url}`}
+                        href={source.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group rounded-[16px] border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 transition-all hover:border-brand-cyan/20 hover:bg-brand-cyan/[0.04]"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[11px] font-medium text-slate-200 group-hover:text-white">
+                              {source.title}
+                            </div>
+                            <div className="mt-1 line-clamp-2 text-[10px] leading-5 text-slate-500">
+                              {source.snippet}
+                            </div>
+                          </div>
+                          <div className="flex flex-shrink-0 items-center gap-1 rounded-full border border-white/[0.06] bg-white/[0.03] px-1.5 py-1 text-[9px] uppercase tracking-[0.14em] text-slate-500">
+                            {source.provider}
+                            <ExternalLink size={10} />
+                          </div>
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          </motion.section>
-        )}
+          </motion.div>
+        ))}
       </AnimatePresence>
 
-      {/* ── Floating toggle button ──────────────────── */}
-      <motion.button
-        onClick={toggleAIChat}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.94 }}
-        className={cn(
-          "fixed bottom-6 right-6 z-40 hidden h-14 w-14 items-center justify-center rounded-[22px] text-white transition-all duration-200 md:flex",
-          aiChatOpen
-            ? "border border-white/8 bg-[rgba(16,18,32,0.96)] text-slate-300"
-            : "bg-gradient-to-br from-brand-cyan to-brand-purple shadow-[0_0_28px_rgba(0,212,255,0.24),0_8px_24px_rgba(0,0,0,0.4)]",
-        )}
-        aria-label="Toggle AI Chat"
-      >
-        <AnimatePresence mode="wait" initial={false}>
-          {aiChatOpen ? (
-            <motion.span
-              key="close"
-              initial={{ rotate: -90, opacity: 0 }}
-              animate={{ rotate: 0, opacity: 1 }}
-              exit={{ rotate: 90, opacity: 0 }}
-              transition={{ duration: 0.14 }}
-            >
-              <X size={18} />
-            </motion.span>
-          ) : (
-            <motion.span
-              key="open"
-              initial={{ rotate: 90, opacity: 0 }}
-              animate={{ rotate: 0, opacity: 1 }}
-              exit={{ rotate: -90, opacity: 0 }}
-              transition={{ duration: 0.14 }}
-            >
-              <Zap size={18} />
-            </motion.span>
+      {loading && (
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex gap-2.5"
+        >
+          <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-cyan to-brand-purple shadow-[0_0_10px_rgba(0,212,255,0.2)]">
+            <Bot size={12} className="text-white" />
+          </div>
+          <div className="flex items-center gap-1.5 rounded-[20px] rounded-tl-[6px] border border-white/6 bg-white/[0.04] px-4 py-3.5">
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-500 [animation-delay:0ms]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-500 [animation-delay:150ms]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-500 [animation-delay:300ms]" />
+          </div>
+        </motion.div>
+      )}
+
+      <div ref={bottomRef} />
+    </div>
+  );
+
+  const composer = (
+    <div className="border-t border-white/7 bg-[linear-gradient(180deg,rgba(10,12,20,0.82),rgba(8,9,16,0.94))] px-4 pb-4 pt-3 sm:px-5">
+      <div className="space-y-3">
+        {pinnedPromptStrip}
+
+        <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">
+          <div className="flex items-center gap-2">
+            <Command size={11} className="text-brand-cyan/70" />
+            Keyboard Deck
+          </div>
+          <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <span className="rounded-full border border-white/8 bg-white/[0.03] px-2 py-1 text-[9px] text-slate-400">
+              Ctrl/Cmd+K focus
+            </span>
+            <span className="rounded-full border border-white/8 bg-white/[0.03] px-2 py-1 text-[9px] text-slate-400">
+              Ctrl/Cmd+Enter send
+            </span>
+            <span className="rounded-full border border-white/8 bg-white/[0.03] px-2 py-1 text-[9px] text-slate-400">
+              Ctrl/Cmd+1-4 lanes
+            </span>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            "rounded-[22px] border bg-white/[0.03] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.18)] transition-all",
+            composerFocused
+              ? "border-brand-cyan/28 bg-brand-cyan/[0.04]"
+              : "border-white/8",
           )}
-        </AnimatePresence>
-      </motion.button>
-    </>
+        >
+          <div className="flex items-end gap-3">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onFocus={() => setComposerFocused(true)}
+              onBlur={() => setComposerFocused(false)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void send();
+                }
+              }}
+              placeholder={
+                isPage
+                  ? "Ask Veritus AI to decide, recall, research, or act..."
+                  : "Ask Veritus AI anything..."
+              }
+              className="min-h-[24px] flex-1 resize-none bg-transparent text-sm leading-6 text-white placeholder:text-slate-500 focus:outline-none"
+              rows={1}
+            />
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => togglePinnedPrompt(input)}
+                disabled={!input.trim()}
+                className={cn(
+                  "rounded-2xl border p-2 text-slate-400 transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                  draftIsPinned
+                    ? "border-brand-cyan/24 bg-brand-cyan/10 text-brand-cyan"
+                    : "border-white/8 bg-white/[0.03] hover:border-white/14 hover:text-white",
+                )}
+                aria-label={
+                  draftIsPinned ? "Unpin draft preset" : "Pin draft preset"
+                }
+              >
+                <Pin
+                  size={14}
+                  className={draftIsPinned ? "fill-current" : ""}
+                />
+              </button>
+
+              <button
+                onClick={() => void send()}
+                disabled={loading || !input.trim()}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-cyan to-brand-purple text-white shadow-[0_16px_34px_rgba(0,212,255,0.2)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Send message"
+              >
+                {loading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Send size={16} />
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 px-1 text-[10px] text-slate-600">
+          <span>
+            Enter to send, Shift+Enter for newline, Ctrl/Cmd+Shift+P to pin the
+            draft.
+          </span>
+          <span className="hidden sm:inline">
+            {isPage
+              ? "Persistent memory + live research + workspace actions"
+              : "Tap a lane, refine the draft, then send"}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (isPage) {
+    return (
+      <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(12,14,24,0.96),rgba(8,9,16,0.94))] shadow-[0_28px_70px_rgba(0,0,0,0.3)] backdrop-blur-xl">
+        <div className="pointer-events-none absolute inset-0 ai-grid-surface opacity-35" />
+        <div className="pointer-events-none absolute -left-10 top-10 h-48 w-48 rounded-full bg-brand-cyan/10 blur-3xl ai-orb-drift-cyan" />
+        <div className="pointer-events-none absolute bottom-10 right-6 h-52 w-52 rounded-full bg-brand-purple/10 blur-3xl ai-orb-drift-purple" />
+
+        <div className="relative grid min-h-[760px] gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,18,34,0.94),rgba(9,11,22,0.92))] shadow-[0_18px_48px_rgba(0,0,0,0.24)]">
+            <div className="border-b border-white/6 px-4 py-4 sm:px-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400">
+                    Thread Stage
+                  </div>
+                  <h2 className="mt-3 text-lg font-semibold text-white sm:text-[22px]">
+                    Run the conversation like an AI cockpit, not a plain chat
+                    box.
+                  </h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+                    Use the command deck to choose the type of reasoning you
+                    want, then let the thread accumulate sources, memories, and
+                    actions.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => void clearChat()}
+                    className="inline-flex items-center gap-2 rounded-[16px] border border-white/8 bg-white/[0.03] px-3 py-2 text-[11px] text-slate-300 transition-colors hover:border-white/14 hover:bg-white/[0.05] hover:text-white"
+                  >
+                    <Trash2 size={12} />
+                    Clear memory
+                  </button>
+                  {[
+                    { label: "Session", value: String(sessionStats.messages) },
+                    {
+                      label: "Memory hits",
+                      value: String(sessionStats.memories),
+                    },
+                    { label: "Actions", value: String(sessionStats.actions) },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className="rounded-[16px] border border-white/8 bg-black/20 px-3 py-2.5"
+                    >
+                      <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                        {item.label}
+                      </div>
+                      <div className="mt-1 text-base font-semibold text-white">
+                        {item.value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 xl:grid-cols-2">
+                {PRIMARY_AI_COMMANDS.map(
+                  ({ label, hint, description, prompt, Icon, tone }, index) => (
+                    <button
+                      key={label}
+                      onClick={() => prefillPrompt(prompt)}
+                      className={cn(
+                        "group rounded-[20px] border p-4 text-left transition-all hover:-translate-y-0.5 hover:border-white/16",
+                        tone,
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                            {hint}
+                          </div>
+                          <div className="mt-2 text-base font-semibold text-white">
+                            {label}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-black/20 px-2 py-1.5 text-[10px] text-slate-400">
+                          {`Ctrl/Cmd+${index + 1}`}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center gap-3">
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-2 text-white/80 transition-transform group-hover:scale-105">
+                          <Icon size={16} />
+                        </div>
+                        <div className="text-sm leading-6 text-slate-300">
+                          {description}
+                        </div>
+                      </div>
+                      <div className="mt-3 text-[11px] leading-5 text-slate-500">
+                        {prompt}
+                      </div>
+                    </button>
+                  ),
+                )}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {SUGGESTION_ITEMS.slice(0, 6).map(({ text, Icon }) => (
+                  <button
+                    key={text}
+                    onClick={() => handlePromptTrigger(text)}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-[11px] text-slate-300 transition-colors hover:border-brand-cyan/20 hover:bg-brand-cyan/10 hover:text-white"
+                  >
+                    <Icon size={11} className="text-brand-cyan/70" />
+                    {text}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 [scrollbar-color:rgba(255,255,255,0.07)_transparent] [scrollbar-width:thin] sm:px-5">
+              {conversationThread}
+            </div>
+
+            {composer}
+          </section>
+
+          <aside className="flex min-h-0 flex-col gap-4 xl:overflow-y-auto xl:pr-1">
+            <section className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+              <div className="flex items-center gap-2 text-white">
+                <Bot size={15} className="text-brand-cyan" />
+                <p className="text-sm font-semibold">Session Radar</p>
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                {[
+                  {
+                    label: "Messages",
+                    value: String(sessionStats.messages),
+                    detail: "conversation turns",
+                  },
+                  {
+                    label: "Memories",
+                    value: String(sessionStats.memories),
+                    detail: "retrieval hits",
+                  },
+                  {
+                    label: "Sources",
+                    value: String(sessionStats.sources),
+                    detail: "citations surfaced",
+                  },
+                  {
+                    label: "Actions",
+                    value: String(sessionStats.actions),
+                    detail: "workspace writes suggested",
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    className="rounded-[18px] border border-white/8 bg-black/20 px-3.5 py-3"
+                  >
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                      {item.label}
+                    </div>
+                    <div className="mt-2 text-lg font-semibold text-white">
+                      {item.value}
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      {item.detail}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+              <div className="flex items-center gap-2 text-white">
+                <FileText size={15} className="text-amber-300" />
+                <p className="text-sm font-semibold">Latest Recall</p>
+              </div>
+              <div className="mt-4 space-y-2">
+                {latestMemories.length > 0 ? (
+                  latestMemories.map((memory, index) => (
+                    <div
+                      key={`${memory.createdAt}-${index}`}
+                      className="rounded-[18px] border border-white/8 bg-white/[0.03] px-3.5 py-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.12em]",
+                            memory.source === "note"
+                              ? "border-amber-400/20 bg-amber-400/10 text-amber-200"
+                              : "border-brand-cyan/20 bg-brand-cyan/10 text-brand-cyan",
+                          )}
+                        >
+                          {memory.source}
+                        </span>
+                        <span className="text-[10px] uppercase tracking-[0.12em] text-slate-600">
+                          {formatMemoryDate(memory.createdAt)}
+                        </span>
+                      </div>
+                      {memory.title && (
+                        <div className="mt-2 text-sm font-medium text-white">
+                          {memory.title}
+                        </div>
+                      )}
+                      <div className="mt-1 text-[12px] leading-6 text-slate-400">
+                        {formatMemoryPreview(memory.content, 150)}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-[18px] border border-dashed border-white/8 bg-white/[0.02] px-3.5 py-4 text-sm leading-6 text-slate-500">
+                    No recalled memory on the latest turn yet. Ask about a past
+                    decision or note to light this panel up.
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+              <div className="flex items-center gap-2 text-white">
+                <Globe size={15} className="text-brand-cyan" />
+                <p className="text-sm font-semibold">Research Deck</p>
+              </div>
+              <div className="mt-4 space-y-2">
+                {latestSources.length > 0 ? (
+                  latestSources.map((source) => (
+                    <a
+                      key={source.url}
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block rounded-[18px] border border-white/8 bg-white/[0.03] px-3.5 py-3 transition-all hover:border-brand-cyan/20 hover:bg-brand-cyan/10"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-white">
+                            {source.title}
+                          </div>
+                          <div className="mt-1 text-[12px] leading-6 text-slate-500">
+                            {source.snippet}
+                          </div>
+                        </div>
+                        <div className="rounded-full border border-white/8 bg-black/20 px-2 py-1 text-[9px] uppercase tracking-[0.12em] text-slate-500">
+                          {source.provider}
+                        </div>
+                      </div>
+                    </a>
+                  ))
+                ) : (
+                  <div className="rounded-[18px] border border-dashed border-white/8 bg-white/[0.02] px-3.5 py-4 text-sm leading-6 text-slate-500">
+                    Web citations will appear here when the latest reply depends
+                    on current information.
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+              <div className="flex items-center gap-2 text-white">
+                <Command size={15} className="text-fuchsia-300" />
+                <p className="text-sm font-semibold">Shortcut Deck</p>
+              </div>
+              <div className="mt-4 space-y-2">
+                {[
+                  "Ctrl/Cmd+K focuses the composer.",
+                  "Ctrl/Cmd+Enter sends the current draft.",
+                  "Ctrl/Cmd+1-4 loads the command lanes.",
+                  "Ctrl/Cmd+Shift+P pins the current draft.",
+                ].map((item) => (
+                  <div
+                    key={item}
+                    className="rounded-[18px] border border-white/8 bg-white/[0.03] px-3.5 py-3 text-sm leading-6 text-slate-300"
+                  >
+                    {item}
+                  </div>
+                ))}
+                {latestActionBadges.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {latestActionBadges.map((badge) => (
+                      <span
+                        key={badge}
+                        className="rounded-full border border-fuchsia-400/18 bg-fuchsia-400/10 px-3 py-1 text-[11px] text-fuchsia-100"
+                      >
+                        {badge}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <AnimatePresence>
+      {aiChatOpen && (
+        <>
+          <motion.button
+            type="button"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm md:hidden"
+            onClick={() => setAIChat(false)}
+            aria-label="Close AI overlay"
+          />
+
+          <motion.div
+            initial={{ y: "100%", opacity: 0.86 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: "100%", opacity: 0.9 }}
+            transition={{ type: "spring", stiffness: 280, damping: 28 }}
+            className="fixed inset-x-0 bottom-0 top-[max(0.65rem,env(safe-area-inset-top))] z-50 md:hidden"
+          >
+            <div className="relative flex h-full flex-col overflow-hidden rounded-t-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(12,14,24,0.98),rgba(8,9,16,0.96))] shadow-[0_-18px_60px_rgba(0,0,0,0.45)]">
+              <div className="pointer-events-none absolute inset-0 ai-grid-surface opacity-40" />
+              <div className="pointer-events-none absolute left-0 top-0 h-44 w-44 rounded-full bg-brand-cyan/12 blur-3xl ai-orb-drift-cyan" />
+              <div className="pointer-events-none absolute bottom-6 right-0 h-52 w-52 rounded-full bg-brand-purple/12 blur-3xl ai-orb-drift-purple" />
+
+              <div className="relative flex h-full flex-col">
+                <div className="border-b border-white/6 px-4 pb-4 pt-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="inline-flex items-center gap-2 rounded-full border border-brand-cyan/20 bg-brand-cyan/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-brand-cyan">
+                        <Bot size={11} />
+                        Veritus AI
+                      </div>
+                      <h2 className="mt-3 text-xl font-semibold text-white">
+                        Mobile mission control.
+                      </h2>
+                      <p className="mt-2 text-sm leading-6 text-slate-400">
+                        Pin the prompts you reuse, run the same command lanes,
+                        and keep the full conversation live on your phone.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => void clearChat()}
+                        className="inline-flex items-center gap-1 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-[11px] text-slate-300"
+                      >
+                        <Trash2 size={11} />
+                        Clear
+                      </button>
+                      <Link
+                        href="/dashboard/ai"
+                        onClick={() => setAIChat(false)}
+                        className="inline-flex items-center gap-1 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-[11px] text-slate-300"
+                      >
+                        Full page
+                        <ArrowUpRight size={11} />
+                      </Link>
+                      <button
+                        onClick={() => setAIChat(false)}
+                        className="rounded-2xl border border-white/10 bg-white/[0.03] p-2 text-slate-300"
+                        aria-label="Close AI overlay"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {PRIMARY_AI_COMMANDS.map(
+                      ({ label, hint, prompt, Icon, tone }, index) => (
+                        <button
+                          key={label}
+                          onClick={() => prefillPrompt(prompt)}
+                          className={cn(
+                            "min-w-[220px] rounded-[20px] border p-4 text-left transition-transform hover:-translate-y-0.5",
+                            tone,
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                                {hint}
+                              </div>
+                              <div className="mt-2 text-base font-semibold text-white">
+                                {label}
+                              </div>
+                            </div>
+                            <div className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[9px] text-slate-400">
+                              {index + 1}
+                            </div>
+                          </div>
+                          <div className="mt-3 flex items-center gap-3 text-sm text-slate-300">
+                            <Icon size={15} />
+                            <span className="line-clamp-2">{prompt}</span>
+                          </div>
+                        </button>
+                      ),
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {SUGGESTION_ITEMS.slice(0, 6).map(({ text, Icon }) => (
+                      <button
+                        key={text}
+                        onClick={() => handlePromptTrigger(text)}
+                        className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-[11px] text-slate-300"
+                      >
+                        <Icon size={11} className="text-brand-cyan/70" />
+                        {text}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 [scrollbar-color:rgba(255,255,255,0.07)_transparent] [scrollbar-width:thin]">
+                  {conversationThread}
+                </div>
+
+                <div
+                  className="pb-[max(1rem,env(safe-area-inset-bottom))]"
+                  style={{
+                    paddingBottom:
+                      "max(1rem, calc(env(safe-area-inset-bottom) + 0.45rem))",
+                  }}
+                >
+                  {composer}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }
