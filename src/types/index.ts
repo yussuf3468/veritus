@@ -9,6 +9,39 @@ export type GoalType = "short_term" | "long_term";
 export type TxType = "income" | "expense";
 export type Frequency = "daily" | "weekly";
 export type DeviceType = "laptop" | "phone" | "tablet" | "desktop" | "other";
+export type NotificationDeliveryMode =
+  | "standard"
+  | "time_sensitive"
+  | "immersive";
+export type NotificationScheduleType = "once" | "daily" | "weekly";
+
+export type AIFollowUpStyle = "primary" | "secondary" | "warning";
+
+export type AIFollowUpAction =
+  | {
+      id: string;
+      label: string;
+      kind: "prefill";
+      prompt: string;
+      style?: AIFollowUpStyle;
+    }
+  | {
+      id: string;
+      label: string;
+      kind: "link";
+      href: string;
+      style?: AIFollowUpStyle;
+    }
+  | {
+      id: string;
+      label: string;
+      kind: "api";
+      endpoint: string;
+      method: "POST" | "PATCH";
+      payload: Record<string, unknown>;
+      successMessage?: string;
+      style?: AIFollowUpStyle;
+    };
 
 // ─── Database row types ──────────────────────────────────────
 
@@ -186,6 +219,24 @@ export interface AIChatMessage {
   content: string;
   metadata: Record<string, unknown> | null;
   created_at: string;
+}
+
+export interface NotificationProgram {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  prompt: string;
+  delivery_mode: NotificationDeliveryMode;
+  schedule_type: NotificationScheduleType;
+  schedule_time: string;
+  schedule_date: string | null;
+  weekdays: number[];
+  is_enabled: boolean;
+  full_screen_intent: boolean;
+  last_triggered_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ─── API response shapes ─────────────────────────────────────

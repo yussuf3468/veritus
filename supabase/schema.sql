@@ -257,6 +257,29 @@ CREATE TABLE IF NOT EXISTS ai_chat_history (
 );
 CREATE INDEX idx_ai_chat_user ON ai_chat_history(user_id, created_at DESC);
 
+-- ─────────────────────── NOTIFICATION PROGRAMS ─────────────
+CREATE TABLE IF NOT EXISTS notification_programs (
+  id                 UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id            UUID        REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  name               TEXT        NOT NULL,
+  description        TEXT,
+  prompt             TEXT        NOT NULL,
+  delivery_mode      TEXT        DEFAULT 'immersive' CHECK (delivery_mode IN ('standard','time_sensitive','immersive')),
+  schedule_type      TEXT        DEFAULT 'daily' CHECK (schedule_type IN ('once','daily','weekly')),
+  schedule_time      TEXT        DEFAULT '07:00' CHECK (schedule_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'),
+  schedule_date      DATE,
+  weekdays           SMALLINT[]  DEFAULT '{}',
+  is_enabled         BOOLEAN     DEFAULT TRUE,
+  full_screen_intent BOOLEAN     DEFAULT TRUE,
+  last_triggered_at  TIMESTAMPTZ,
+  created_at         TIMESTAMPTZ DEFAULT NOW(),
+  updated_at         TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE TRIGGER trg_notification_programs_updated_at
+  BEFORE UPDATE ON notification_programs
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE INDEX idx_notification_programs_user_id ON notification_programs(user_id);
+
 -- ═══════════════════════ ROW LEVEL SECURITY ══════════════════
 ALTER TABLE user_profiles        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks                ENABLE ROW LEVEL SECURITY;
@@ -272,6 +295,7 @@ ALTER TABLE goal_milestones      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE devices              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE device_activity_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_chat_history      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_programs ENABLE ROW LEVEL SECURITY;
 
 -- Helper: authenticated user owns row
 CREATE OR REPLACE FUNCTION is_owner(row_user_id UUID)
@@ -307,3 +331,8 @@ BEGIN
   END LOOP;
 END;
 $$;
+
+CREATE POLICY "owner_all_notification_programs" ON notification_programs
+  FOR ALL TO authenticated
+  USING (is_owner(user_id))
+  WITH CHECK (is_owner(user_id));

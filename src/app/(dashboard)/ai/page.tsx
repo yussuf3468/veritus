@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { AIChat } from "@/components/ai/AIChat";
-import { formatCurrency, resolveCurrencyCode } from "@/lib/utils";
+import { cn, formatCurrency, resolveCurrencyCode } from "@/lib/utils";
 import { format, startOfMonth } from "date-fns";
 import {
   Bot,
@@ -79,19 +79,30 @@ export default async function AIPage() {
   const urgentTasks = (tasks ?? []).filter(
     (task) => task.priority === "urgent",
   ).length;
+  const overdueTasks = (tasks ?? []).filter(
+    (task) =>
+      task.due_date &&
+      task.due_date < format(new Date(), "yyyy-MM-dd") &&
+      task.status !== "completed" &&
+      task.status !== "cancelled",
+  ).length;
   const dueSoon = (tasks ?? []).filter(
     (task) =>
       task.due_date &&
       task.status !== "completed" &&
       task.status !== "cancelled",
   ).length;
+  const incompleteHabits = Math.max(
+    (habits?.length ?? 0) - (completions?.length ?? 0),
+    0,
+  );
 
   const promptCards = [
-    "Plan my day around my tasks and habits.",
+    "Run my morning brief across tasks, money, habits, and goals.",
+    "Build a recovery plan for my overdue and urgent work.",
+    "Run my weekly reset across tasks, money, habits, goals, and notes.",
+    "Give me an automation finance watch and next moves.",
     "What should I focus on first, and why?",
-    "What did we decide about my budget last time?",
-    "Look up the latest budgeting apps and compare them.",
-    "Summarize my current system health across tasks, money, and goals.",
   ];
 
   const stageCards = [
@@ -110,35 +121,76 @@ export default async function AIPage() {
       icon: <FileText size={16} className="text-amber-300" />,
     },
     {
-      title: "Action engine",
+      title: "Automation stack",
       detail:
-        "The same workspace can research, advise, and then write into the rest of Veritus.",
+        "The same workspace can now run daily briefs, rescue plans, and weekly resets across the rest of Veritus.",
       value: `${formatCurrency(balance, currency)} live context`,
       icon: <Bot size={16} className="text-emerald-300" />,
     },
   ];
 
+  const automationCards = [
+    {
+      title: "Morning Brief",
+      detail:
+        "Generate the opening operating brief before you start moving through the day.",
+      signal: `${pendingTasks} tasks · ${incompleteHabits} habits left`,
+      prompt: "Run my morning brief across tasks, money, habits, and goals.",
+      accent: "text-brand-cyan",
+    },
+    {
+      title: "Recovery Plan",
+      detail:
+        "When pressure builds, force the system back into a smaller, winnable lane.",
+      signal: `${urgentTasks} urgent · ${overdueTasks} overdue`,
+      prompt: "Build a recovery plan for my overdue and urgent work.",
+      accent: "text-amber-300",
+    },
+    {
+      title: "Weekly Reset",
+      detail:
+        "Re-anchor tasks, habits, goals, notes, and money so next week does not start cold.",
+      signal: `${goals?.length ?? 0} goals · ${notes?.length ?? 0} notes`,
+      prompt:
+        "Run my weekly reset across tasks, money, habits, goals, and notes.",
+      accent: "text-fuchsia-300",
+    },
+    {
+      title: "Finance Watch",
+      detail:
+        "Turn monthly money context into one clear operating signal and next move.",
+      signal: `${formatCurrency(balance, currency)} month-to-date`,
+      prompt: "Give me an automation finance watch and next moves.",
+      accent: "text-emerald-300",
+    },
+  ];
+
   return (
-    <div className="space-y-4 animate-fade-in">
-      <section className="relative overflow-hidden rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,18,32,0.96),rgba(9,10,18,0.94))] p-5 shadow-[0_24px_72px_rgba(0,0,0,0.32)] backdrop-blur-xl sm:p-6">
+    <div className="space-y-3 animate-fade-in sm:space-y-4">
+      <section className="relative overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,18,32,0.96),rgba(9,10,18,0.94))] p-4 shadow-[0_24px_72px_rgba(0,0,0,0.32)] backdrop-blur-xl sm:rounded-[30px] sm:p-6">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,212,255,0.16),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(124,58,237,0.16),transparent_34%)]" />
-        <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_360px]">
+        <div className="relative grid gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1.2fr)_340px] xl:grid-cols-[minmax(0,1.3fr)_360px]">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-brand-cyan/20 bg-brand-cyan/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.22em] text-brand-cyan">
+            <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-brand-cyan/20 bg-brand-cyan/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.22em] text-brand-cyan">
               <Sparkles size={12} />
               Veritus AI
             </div>
-            <h1 className="mt-3 text-[25px] font-semibold tracking-tight text-white sm:text-[32px] sm:leading-[1.1]">
-              A proper AI cockpit for strategy, research, recall, and action.
+            <div className="mt-2.5 inline-flex max-w-full items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-emerald-200 sm:mt-3">
+              <Bot size={11} />
+              Phase 2 · AI Automation
+            </div>
+            <h1 className="mt-3 text-[22px] font-semibold leading-[1.08] tracking-tight text-white sm:text-[32px] sm:leading-[1.1]">
+              A proper AI cockpit for strategy, recall, research, action, and
+              automation.
             </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-300 sm:text-[15px]">
+            <p className="mt-2.5 max-w-3xl text-[13px] leading-6 text-slate-300 sm:mt-3 sm:text-[15px] sm:leading-7">
               This page should feel closer to a mission control surface than a
-              generic chat window. It now combines command lanes, persistent
-              memory, visible research, and a stronger thread stage in one
-              place.
+              generic chat window. Phase 2 pushes it further: command lanes,
+              persistent memory, visible research, and automation runs now sit
+              in the same operating surface.
             </p>
 
-            <div className="mt-4 flex flex-wrap gap-2.5">
+            <div className="mt-4 flex flex-wrap gap-2">
               <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-slate-300">
                 {pendingTasks} pending tasks
               </span>
@@ -156,7 +208,7 @@ export default async function AIPage() {
               </span>
             </div>
 
-            <div className="mt-5 grid gap-3 lg:grid-cols-3">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {stageCards.map((card) => (
                 <div
                   key={card.title}
@@ -179,12 +231,12 @@ export default async function AIPage() {
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-white/8 bg-black/20 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+          <div className="rounded-[22px] border border-white/8 bg-black/20 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] sm:rounded-[24px]">
             <div className="flex items-center gap-2 text-white">
               <Brain size={16} className="text-brand-cyan" />
               <p className="text-sm font-semibold">Command Prompts</p>
             </div>
-            <div className="mt-4 space-y-2">
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
               {promptCards.map((prompt, index) => (
                 <div
                   key={prompt}
@@ -202,7 +254,7 @@ export default async function AIPage() {
           </div>
         </div>
 
-        <div className="relative mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="relative mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-[22px] border border-white/8 bg-black/20 p-4">
             <div className="flex items-center justify-between gap-3">
               <CheckSquare size={16} className="text-brand-cyan" />
@@ -258,6 +310,40 @@ export default async function AIPage() {
             </p>
           </div>
         </div>
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {automationCards.map((card) => (
+          <Link
+            key={card.title}
+            href={{
+              pathname: "/dashboard/ai",
+              query: { prompt: card.prompt, autorun: "1" },
+            }}
+            scroll={false}
+            className="group rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_18px_48px_rgba(0,0,0,0.24)] transition-all hover:-translate-y-1 hover:border-white/16 sm:rounded-[26px]"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                  Automation Run
+                </div>
+                <div className={cn("mt-2 text-lg font-semibold", card.accent)}>
+                  {card.title}
+                </div>
+              </div>
+              <div className="rounded-full border border-white/8 bg-white/[0.04] px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-slate-400">
+                Run
+              </div>
+            </div>
+            <div className="mt-4 text-sm leading-6 text-slate-300">
+              {card.detail}
+            </div>
+            <div className="mt-4 rounded-[18px] border border-white/8 bg-black/20 px-3 py-3 text-[11px] uppercase tracking-[0.16em] text-slate-500">
+              {card.signal}
+            </div>
+          </Link>
+        ))}
       </section>
 
       <AIChat mode="page" />

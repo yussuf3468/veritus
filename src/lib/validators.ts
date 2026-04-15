@@ -140,6 +140,32 @@ export const DeviceSchema = z.object({
   session_token: z.string().max(128).optional(),
 });
 
+// ─── Notification Programs ──────────────────────────────────
+export const NotificationProgramSchema = z.object({
+  name: z.string().min(1).max(160),
+  description: z.string().max(1000).optional().nullable(),
+  prompt: z.string().min(1).max(1200),
+  delivery_mode: z
+    .enum(["standard", "time_sensitive", "immersive"])
+    .default("immersive"),
+  schedule_type: z.enum(["once", "daily", "weekly"]).default("daily"),
+  schedule_time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+    .default("07:00"),
+  schedule_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .nullable(),
+  weekdays: z.array(z.number().int().min(1).max(7)).max(7).default([]),
+  is_enabled: z.boolean().default(true),
+  full_screen_intent: z.boolean().default(true),
+});
+
+export const NotificationProgramUpdateSchema =
+  NotificationProgramSchema.partial();
+
 // ─── AI ───────────────────────────────────────────────────────
 export const AIMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),

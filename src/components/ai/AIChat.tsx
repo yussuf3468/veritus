@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -31,7 +32,7 @@ import { useTaskStore } from "@/store/tasks";
 import { useHabitStore } from "@/store/habits";
 import { useGoalsStore } from "@/store/goals";
 import { cn, formatCurrency } from "@/lib/utils";
-import type { Goal, Habit, Task, Transaction } from "@/types";
+import type { AIFollowUpAction, Goal, Habit, Task, Transaction } from "@/types";
 
 type ActionPayload = { action?: string } & Record<string, unknown>;
 
@@ -56,6 +57,7 @@ interface Message {
   action?: ActionPayload;
   memories?: MemoryItem[];
   sources?: SourceItem[];
+  followUps?: AIFollowUpAction[];
 }
 
 type AIChatProps = {
@@ -69,15 +71,21 @@ const MAX_PINNED_PRESETS = 6;
 const SUGGESTION_ITEMS: { text: string; Icon: React.ElementType }[] = [
   { text: "I got KSh 1,000 from Ali", Icon: TrendingUp },
   { text: "I spent KSh 500 on groceries", Icon: ShoppingCart },
-  { text: "Summarize my day", Icon: BarChart3 },
+  {
+    text: "Run my morning brief across tasks, money, habits, and goals.",
+    Icon: Sparkles,
+  },
   { text: "What should I focus on first, and why?", Icon: Target },
-  { text: "Plan my day around my tasks and habits.", Icon: Target },
+  {
+    text: "Build a recovery plan for my overdue and urgent work.",
+    Icon: Wand2,
+  },
   { text: "What did we decide about my budget last time?", Icon: FileText },
   {
-    text: "Look up the latest budgeting apps and compare them.",
-    Icon: Globe,
+    text: "Run my weekly reset across tasks, money, habits, goals, and notes.",
+    Icon: BarChart3,
   },
-  { text: "Research current mortgage rates.", Icon: Globe },
+  { text: "Look up the latest budgeting apps and compare them.", Icon: Globe },
 ];
 
 const PRIMARY_AI_COMMANDS: Array<{
@@ -97,11 +105,12 @@ const PRIMARY_AI_COMMANDS: Array<{
     tone: "border-brand-cyan/18 bg-[radial-gradient(circle_at_top_left,rgba(0,212,255,0.16),transparent_45%),rgba(255,255,255,0.02)] text-brand-cyan",
   },
   {
-    label: "Recall",
-    hint: "Persistent memory",
-    description: "Pull back relevant chat and note context instantly.",
-    prompt: "What did we decide about my budget last time?",
-    Icon: FileText,
+    label: "Automate",
+    hint: "Phase 2",
+    description:
+      "Run morning briefs, recovery plans, and weekly resets across the whole system.",
+    prompt: "Run my morning brief across tasks, money, habits, and goals.",
+    Icon: Sparkles,
     tone: "border-amber-400/18 bg-[radial-gradient(circle_at_top_left,rgba(251,191,36,0.14),transparent_45%),rgba(255,255,255,0.02)] text-amber-200",
   },
   {
@@ -125,7 +134,9 @@ const PRIMARY_AI_COMMANDS: Array<{
 const DEFAULT_PINNED_PROMPTS = [
   "What should I focus on first, and why?",
   "What did we decide about my budget last time?",
-  "Summarize my current system health across tasks, money, and goals.",
+  "Run my morning brief across tasks, money, habits, and goals.",
+  "Build a recovery plan for my overdue and urgent work.",
+  "Run my weekly reset across tasks, money, habits, goals, and notes.",
 ];
 
 const DEFAULT_MESSAGES: Message[] = [
@@ -133,7 +144,7 @@ const DEFAULT_MESSAGES: Message[] = [
     id: "welcome",
     role: "assistant",
     content:
-      'Hi! I\'m your Veritus AI. I can advise, summarize your day, search the web with sources, pull relevant memories from past chats and notes, add tasks, and record money activity from normal language. Try **"what did we decide about my budget last time?"**, **"I got KSh 1,000 from Ali"**, or **"What should I focus on first, and why?"**.',
+      'Hi! I\'m your Veritus AI. Phase 2 is now automation-focused: I can run morning briefs, recovery plans, weekly resets, search the web with sources, pull relevant memories from past chats and notes, add tasks, and record money activity from normal language. Try **"run my morning brief"**, **"build a recovery plan for my overdue work"**, or **"what should I focus on first, and why?"**.',
   },
 ];
 
@@ -231,6 +242,9 @@ function getActionBadges(action?: ActionPayload) {
 
 export function AIChat({ mode = "overlay" }: AIChatProps) {
   const isPage = mode === "page";
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { aiChatOpen, setAIChat } = useUIStore();
   const addTransaction = useMoneyStore((state) => state.addTransaction);
   const addTask = useTaskStore((state) => state.addTask);
@@ -239,12 +253,14 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
   const [messages, setMessages] = useState<Message[]>(DEFAULT_MESSAGES);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [activeFollowUpId, setActiveFollowUpId] = useState<string | null>(null);
   const [composerFocused, setComposerFocused] = useState(false);
   const [pinnedPrompts, setPinnedPrompts] = useState<string[]>(
     DEFAULT_PINNED_PROMPTS,
   );
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const handledRoutePromptRef = useRef<string | null>(null);
 
   const hasConversation = useMemo(
     () => messages.some((message) => message.id !== "welcome"),
@@ -393,6 +409,107 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
     [addGoal, addHabit, addTask, addTransaction],
   );
 
+  const syncFollowUpResult = useCallback(
+    (endpoint: string, result: unknown) => {
+      if (!result || typeof result !== "object") return;
+
+      if (endpoint.startsWith("/api/tasks")) {
+        addTask(result as Task);
+        return;
+      }
+
+      if (endpoint.startsWith("/api/money")) {
+        addTransaction(result as Transaction);
+        return;
+      }
+
+      if (endpoint.startsWith("/api/habits")) {
+        addHabit(result as Habit);
+        return;
+      }
+
+      if (endpoint.startsWith("/api/goals")) {
+        addGoal(result as Goal);
+      }
+    },
+    [addGoal, addHabit, addTask, addTransaction],
+  );
+
+  const appendAssistantMessage = useCallback((content: string) => {
+    setMessages((current) =>
+      normalizeLoadedMessages([
+        ...current.filter((message) => message.id !== "welcome"),
+        {
+          id: createMessageId(),
+          role: "assistant",
+          content,
+        },
+      ]),
+    );
+  }, []);
+
+  const handleFollowUpAction = useCallback(
+    async (followUp: AIFollowUpAction) => {
+      if (followUp.kind === "prefill") {
+        prefillPrompt(followUp.prompt);
+        return;
+      }
+
+      if (followUp.kind === "link") {
+        if (!isPage) {
+          setAIChat(false);
+        }
+
+        router.push(followUp.href);
+        return;
+      }
+
+      setActiveFollowUpId(followUp.id);
+      try {
+        const res = await fetch(followUp.endpoint, {
+          method: followUp.method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(followUp.payload),
+        });
+
+        const json = await res.json();
+        if (!res.ok) {
+          throw new Error(
+            typeof json.error === "string"
+              ? json.error
+              : "Unable to run that follow-up right now.",
+          );
+        }
+
+        const result = json.data;
+        syncFollowUpResult(followUp.endpoint, result);
+
+        if (followUp.successMessage) {
+          appendAssistantMessage(followUp.successMessage);
+          toast.success(followUp.successMessage);
+        } else {
+          toast.success("Follow-up action completed.");
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : "Unable to run that follow-up right now.";
+        toast.error(message);
+      } finally {
+        setActiveFollowUpId(null);
+      }
+    },
+    [
+      appendAssistantMessage,
+      isPage,
+      prefillPrompt,
+      router,
+      setAIChat,
+      syncFollowUpResult,
+    ],
+  );
+
   const send = useCallback(
     async (override?: string) => {
       const content = (override ?? input).trim();
@@ -459,6 +576,9 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
             : undefined,
           sources: Array.isArray(data.sources)
             ? (data.sources as SourceItem[])
+            : undefined,
+          followUps: Array.isArray(data.followUps)
+            ? (data.followUps as AIFollowUpAction[])
             : undefined,
         };
 
@@ -636,6 +756,40 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
     togglePinnedPrompt,
   ]);
 
+  useEffect(() => {
+    if (!isPage) return;
+
+    const routePrompt = searchParams.get("prompt")?.trim();
+    const autorun = searchParams.get("autorun") === "1";
+
+    if (!routePrompt) {
+      handledRoutePromptRef.current = null;
+      return;
+    }
+
+    const promptKey = `${routePrompt}::${autorun ? "run" : "prefill"}`;
+    if (handledRoutePromptRef.current === promptKey) {
+      return;
+    }
+
+    handledRoutePromptRef.current = promptKey;
+
+    if (autorun) {
+      void send(routePrompt);
+    } else {
+      prefillPrompt(routePrompt);
+    }
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("prompt");
+    nextParams.delete("autorun");
+
+    router.replace(
+      nextParams.toString() ? `${pathname}?${nextParams.toString()}` : pathname,
+      { scroll: false },
+    );
+  }, [isPage, pathname, prefillPrompt, router, searchParams, send]);
+
   const pinnedPromptStrip = pinnedPrompts.length > 0 && (
     <motion.div
       layout
@@ -680,7 +834,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
           animate={{ opacity: 1, y: 0 }}
           className={cn(
             "overflow-hidden rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
-            isPage ? "p-5" : "p-4",
+            isPage ? "p-4 sm:p-5" : "p-4",
           )}
         >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -695,12 +849,13 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                   : "Ask fast, pin the prompts you reuse, and keep the whole session in view."}
               </h2>
               <p className="mt-2 text-sm leading-6 text-slate-400">
-                Veritus AI now keeps memory, source cards, and action signals
-                visible so the workspace feels continuous instead of disposable.
+                Veritus AI now keeps memory, source cards, action signals, and
+                automation runs visible so the workspace feels continuous
+                instead of disposable.
               </p>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-3 lg:w-[360px]">
+            <div className="grid grid-cols-3 gap-2 lg:w-[360px]">
               {[
                 {
                   label: "Session",
@@ -720,7 +875,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
               ].map((item) => (
                 <div
                   key={item.label}
-                  className="rounded-[18px] border border-white/8 bg-black/20 px-3 py-3"
+                  className="rounded-[18px] border border-white/8 bg-black/20 px-2.5 py-2.5 sm:px-3 sm:py-3"
                 >
                   <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
                     {item.label}
@@ -761,7 +916,9 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
             <div
               className={cn(
                 "space-y-2",
-                isPage ? "max-w-[92%] lg:max-w-[84%]" : "max-w-[88%]",
+                isPage
+                  ? "max-w-[calc(100%-2.5rem)] sm:max-w-[92%] lg:max-w-[84%]"
+                  : "max-w-[88%]",
               )}
             >
               <div
@@ -791,6 +948,30 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                     >
                       {badge}
                     </span>
+                  ))}
+                </div>
+              )}
+
+              {message.followUps && message.followUps.length > 0 && (
+                <div className="flex flex-wrap gap-2 px-0.5">
+                  {message.followUps.map((followUp) => (
+                    <button
+                      key={`${message.id}-${followUp.id}`}
+                      onClick={() => void handleFollowUpAction(followUp)}
+                      disabled={activeFollowUpId === followUp.id}
+                      className={cn(
+                        "rounded-full px-3 py-1.5 text-[11px] font-medium transition-all disabled:cursor-not-allowed disabled:opacity-60",
+                        followUp.style === "warning"
+                          ? "border border-amber-400/24 bg-amber-400/10 text-amber-100 hover:border-amber-300/40"
+                          : followUp.style === "secondary"
+                            ? "border border-white/8 bg-white/[0.03] text-slate-300 hover:border-white/16 hover:text-white"
+                            : "border border-brand-cyan/24 bg-brand-cyan/12 text-brand-cyan hover:border-brand-cyan/40",
+                      )}
+                    >
+                      {activeFollowUpId === followUp.id
+                        ? "Running..."
+                        : followUp.label}
+                    </button>
                   ))}
                 </div>
               )}
@@ -902,7 +1083,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
   );
 
   const composer = (
-    <div className="border-t border-white/7 bg-[linear-gradient(180deg,rgba(10,12,20,0.82),rgba(8,9,16,0.94))] px-4 pb-4 pt-3 sm:px-5">
+    <div className="border-t border-white/7 bg-[linear-gradient(180deg,rgba(10,12,20,0.82),rgba(8,9,16,0.94))] px-3 pb-3 pt-3 sm:px-5 sm:pb-4">
       <div className="space-y-3">
         {pinnedPromptStrip}
 
@@ -911,7 +1092,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
             <Command size={11} className="text-brand-cyan/70" />
             Keyboard Deck
           </div>
-          <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="hidden items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex">
             <span className="rounded-full border border-white/8 bg-white/[0.03] px-2 py-1 text-[9px] text-slate-400">
               Ctrl/Cmd+K focus
             </span>
@@ -932,7 +1113,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
               : "border-white/8",
           )}
         >
-          <div className="flex items-end gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <textarea
               ref={inputRef}
               value={input}
@@ -950,11 +1131,11 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                   ? "Ask Veritus AI to decide, recall, research, or act..."
                   : "Ask Veritus AI anything..."
               }
-              className="min-h-[24px] flex-1 resize-none bg-transparent text-sm leading-6 text-white placeholder:text-slate-500 focus:outline-none"
+              className="min-h-[72px] w-full flex-1 resize-none bg-transparent text-sm leading-6 text-white placeholder:text-slate-500 focus:outline-none sm:min-h-[24px]"
               rows={1}
             />
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-end gap-2 sm:justify-start">
               <button
                 onClick={() => togglePinnedPrompt(input)}
                 disabled={!input.trim()}
@@ -990,14 +1171,14 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-2 px-1 text-[10px] text-slate-600">
+        <div className="flex flex-col items-start gap-1 px-1 text-[10px] text-slate-600 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
           <span>
             Enter to send, Shift+Enter for newline, Ctrl/Cmd+Shift+P to pin the
             draft.
           </span>
           <span className="hidden sm:inline">
             {isPage
-              ? "Persistent memory + live research + workspace actions"
+              ? "Phase 2 automation + persistent memory + workspace actions"
               : "Tap a lane, refine the draft, then send"}
           </span>
         </div>
@@ -1007,14 +1188,14 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
 
   if (isPage) {
     return (
-      <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(12,14,24,0.96),rgba(8,9,16,0.94))] shadow-[0_28px_70px_rgba(0,0,0,0.3)] backdrop-blur-xl">
+      <div className="relative overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(12,14,24,0.96),rgba(8,9,16,0.94))] shadow-[0_28px_70px_rgba(0,0,0,0.3)] backdrop-blur-xl sm:rounded-[32px]">
         <div className="pointer-events-none absolute inset-0 ai-grid-surface opacity-35" />
         <div className="pointer-events-none absolute -left-10 top-10 h-48 w-48 rounded-full bg-brand-cyan/10 blur-3xl ai-orb-drift-cyan" />
         <div className="pointer-events-none absolute bottom-10 right-6 h-52 w-52 rounded-full bg-brand-purple/10 blur-3xl ai-orb-drift-purple" />
 
-        <div className="relative grid min-h-[760px] gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,18,34,0.94),rgba(9,11,22,0.92))] shadow-[0_18px_48px_rgba(0,0,0,0.24)]">
-            <div className="border-b border-white/6 px-4 py-4 sm:px-5">
+        <div className="relative grid gap-3 p-3 sm:gap-4 sm:p-4 lg:min-h-[760px] lg:grid-cols-[minmax(0,1fr)_320px]">
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,18,34,0.94),rgba(9,11,22,0.92))] shadow-[0_18px_48px_rgba(0,0,0,0.24)] sm:rounded-[28px]">
+            <div className="border-b border-white/6 px-3.5 py-3.5 sm:px-5 sm:py-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <div className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400">
@@ -1062,14 +1243,14 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-3 xl:grid-cols-2">
+              <div className="mt-4 flex gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-2 md:overflow-visible md:pb-0 xl:grid-cols-2">
                 {PRIMARY_AI_COMMANDS.map(
                   ({ label, hint, description, prompt, Icon, tone }, index) => (
                     <button
                       key={label}
                       onClick={() => prefillPrompt(prompt)}
                       className={cn(
-                        "group rounded-[20px] border p-4 text-left transition-all hover:-translate-y-0.5 hover:border-white/16",
+                        "group min-w-[260px] snap-start rounded-[18px] border p-4 text-left transition-all hover:-translate-y-0.5 hover:border-white/16 md:min-w-0 md:rounded-[20px]",
                         tone,
                       )}
                     >
@@ -1102,12 +1283,12 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                 )}
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:overflow-visible md:pb-0">
                 {SUGGESTION_ITEMS.slice(0, 6).map(({ text, Icon }) => (
                   <button
                     key={text}
                     onClick={() => handlePromptTrigger(text)}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-[11px] text-slate-300 transition-colors hover:border-brand-cyan/20 hover:bg-brand-cyan/10 hover:text-white"
+                    className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-[11px] text-slate-300 transition-colors hover:border-brand-cyan/20 hover:bg-brand-cyan/10 hover:text-white md:shrink md:whitespace-normal"
                   >
                     <Icon size={11} className="text-brand-cyan/70" />
                     {text}
@@ -1116,20 +1297,20 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 [scrollbar-color:rgba(255,255,255,0.07)_transparent] [scrollbar-width:thin] sm:px-5">
+            <div className="min-h-0 flex-1 overflow-y-auto px-3.5 py-3.5 [scrollbar-color:rgba(255,255,255,0.07)_transparent] [scrollbar-width:thin] sm:px-5 sm:py-4">
               {conversationThread}
             </div>
 
             {composer}
           </section>
 
-          <aside className="flex min-h-0 flex-col gap-4 xl:overflow-y-auto xl:pr-1">
+          <aside className="grid min-h-0 gap-3 md:grid-cols-2 lg:grid-cols-1 lg:gap-4 lg:overflow-y-auto lg:pr-1">
             <section className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
               <div className="flex items-center gap-2 text-white">
                 <Bot size={15} className="text-brand-cyan" />
                 <p className="text-sm font-semibold">Session Radar</p>
               </div>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
                 {[
                   {
                     label: "Messages",
@@ -1216,7 +1397,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
               </div>
             </section>
 
-            <section className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+            <section className="hidden rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)] md:block">
               <div className="flex items-center gap-2 text-white">
                 <Globe size={15} className="text-brand-cyan" />
                 <p className="text-sm font-semibold">Research Deck</p>
@@ -1255,7 +1436,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
               </div>
             </section>
 
-            <section className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+            <section className="hidden rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)] md:block">
               <div className="flex items-center gap-2 text-white">
                 <Command size={15} className="text-fuchsia-300" />
                 <p className="text-sm font-semibold">Shortcut Deck</p>
@@ -1323,22 +1504,22 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
 
               <div className="relative flex h-full flex-col">
                 <div className="border-b border-white/6 px-4 pb-4 pt-4">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <div className="inline-flex items-center gap-2 rounded-full border border-brand-cyan/20 bg-brand-cyan/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-brand-cyan">
                         <Bot size={11} />
                         Veritus AI
                       </div>
-                      <h2 className="mt-3 text-xl font-semibold text-white">
+                      <h2 className="mt-3 text-lg font-semibold text-white sm:text-xl">
                         Mobile mission control.
                       </h2>
-                      <p className="mt-2 text-sm leading-6 text-slate-400">
+                      <p className="mt-2 text-[13px] leading-6 text-slate-400 sm:text-sm">
                         Pin the prompts you reuse, run the same command lanes,
                         and keep the full conversation live on your phone.
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
                       <button
                         onClick={() => void clearChat()}
                         className="inline-flex items-center gap-1 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-[11px] text-slate-300"

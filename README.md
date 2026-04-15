@@ -175,6 +175,20 @@ The AI detects intent, responds in plain language, and automatically executes th
 
 ---
 
+## Native iPhone Build
+
+The repository now includes [ios-native/README.md](ios-native/README.md), a private SwiftUI iPhone shell that:
+
+- embeds the existing Veritus AI command center in a native `WKWebView`
+- syncs immersive alert programs from `/api/notification-programs`
+- schedules local iPhone alerts and opens a custom full-screen alert surface when you open the alert
+
+Important platform constraint: iOS does not allow arbitrary movie-style full-screen lock-screen takeovers for normal apps. The native project uses the strongest compliant path available to a sideloaded personal app: time-sensitive local notifications plus a custom full-screen immersive alert once the notification is opened.
+
+Important install constraint: this workspace is on Windows, so the app cannot be code signed or installed on an iPhone from here. Final build/sign/install still requires macOS + Xcode + your iPhone over USB-C.
+
+---
+
 ## License
 
 MIT

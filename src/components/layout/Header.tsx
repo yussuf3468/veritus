@@ -103,9 +103,9 @@ export function Header({ userEmail, userName, dateLabel }: HeaderProps) {
       className="z-30 flex-shrink-0 md:sticky"
       style={{ top: "calc(env(safe-area-inset-top) + 0.75rem)" }}
     >
-      <div className="relative overflow-hidden rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,17,28,0.92),rgba(10,11,20,0.88))] shadow-[0_16px_44px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+      <div className="relative overflow-hidden rounded-[20px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,17,28,0.92),rgba(10,11,20,0.88))] shadow-[0_16px_44px_rgba(0,0,0,0.28)] backdrop-blur-xl sm:rounded-[22px]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,212,255,0.1),transparent_24%),radial-gradient(circle_at_top_right,rgba(124,58,237,0.1),transparent_20%)]" />
-        <div className="relative flex flex-col gap-3 px-4 py-3.5 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative flex flex-col gap-3 px-3.5 py-3 sm:px-5 sm:py-3.5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-start gap-3 sm:gap-4">
             <button
               onClick={toggleMobileSidebar}
@@ -138,14 +138,15 @@ export function Header({ userEmail, userName, dateLabel }: HeaderProps) {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3 lg:justify-end">
             <Link
               href="/dashboard/ai"
-              className="flex h-9 items-center gap-2 rounded-xl border border-brand-cyan/20 bg-brand-cyan/10 px-3 text-sm font-medium text-brand-cyan transition-colors hover:bg-brand-cyan/15"
+              className="flex h-9 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border border-brand-cyan/20 bg-brand-cyan/10 px-3 text-sm font-medium text-brand-cyan transition-colors hover:bg-brand-cyan/15 sm:flex-none sm:justify-start"
               aria-label="Open AI assistant"
             >
               <Bot size={15} />
-              <span>Veritus AI</span>
+              <span className="sm:hidden">AI</span>
+              <span className="hidden sm:inline">Veritus AI</span>
             </Link>
 
             <button
@@ -155,7 +156,7 @@ export function Header({ userEmail, userName, dateLabel }: HeaderProps) {
               <Bell size={15} />
             </button>
 
-            <div className="flex min-w-0 items-center gap-2 rounded-[18px] border border-white/10 bg-white/[0.05] px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+            <div className="ml-auto flex min-w-0 items-center gap-2 rounded-[18px] border border-white/10 bg-white/[0.05] px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:ml-0">
               <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-cyan to-brand-purple text-white shadow-glow">
                 <User size={14} />
               </div>

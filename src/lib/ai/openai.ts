@@ -550,6 +550,162 @@ function buildPlanningReply(ctx: AIContext) {
   return ["Here is a clean plan for today:", ...steps].join("\n");
 }
 
+function buildMorningBriefReply(ctx: AIContext) {
+  const lines = ["Here is your automation morning brief:"];
+  const priorityTask = pickPriorityTask(ctx.tasks?.recent);
+  const topGoal = ctx.goals?.recent?.[0];
+  const remainingHabits = Math.max(
+    (ctx.habits?.total ?? 0) - (ctx.habits?.completedToday ?? 0),
+    0,
+  );
+  const largestExpense = pickLargestExpense(ctx.money?.recent);
+
+  if (priorityTask) {
+    lines.push(
+      `1. Primary move: start with **${priorityTask.title}**${priorityTask.dueDate ? ` before ${priorityTask.dueDate}` : " first"}.`,
+    );
+  } else if ((ctx.tasks?.pending ?? 0) > 0) {
+    lines.push(
+      `1. Primary move: choose one of your ${ctx.tasks?.pending ?? 0} pending tasks and keep it as the first finished block of the day.`,
+    );
+  } else {
+    lines.push(
+      "1. Primary move: your queue is light, so use the first block to define one concrete task instead of drifting into reactive work.",
+    );
+  }
+
+  if ((ctx.tasks?.urgent ?? 0) > 0 || (ctx.tasks?.overdue ?? 0) > 0) {
+    lines.push(
+      `2. Risk lane: you have ${ctx.tasks?.urgent ?? 0} urgent and ${ctx.tasks?.overdue ?? 0} overdue task${(ctx.tasks?.overdue ?? 0) === 1 ? "" : "s"}, so clear pressure before starting new work.`,
+    );
+  } else if (remainingHabits > 0) {
+    lines.push(
+      `2. Habit lane: finish the remaining ${remainingHabits} habit${remainingHabits === 1 ? "" : "s"} while momentum is fresh.`,
+    );
+  }
+
+  if (topGoal) {
+    lines.push(
+      `3. Goal lane: move **${topGoal.title}** one visible step so the week is not all maintenance and no progress.`,
+    );
+  }
+
+  if (ctx.money) {
+    lines.push(
+      ctx.money.balance >= 0
+        ? `4. Finance watch: you are up ${formatMoneyAmount(ctx.money.balance, ctx.money.currency)} this month${largestExpense ? `, with ${formatMoneyAmount(largestExpense.amount, ctx.money.currency)} in ${largestExpense.category} as the biggest recent expense` : ""}.`
+        : `4. Finance watch: you are down ${formatMoneyAmount(Math.abs(ctx.money.balance), ctx.money.currency)} this month${largestExpense ? `, and ${largestExpense.category} is the clearest category to review` : ""}.`,
+    );
+  }
+
+  if (ctx.recentNotes?.length) {
+    lines.push(`5. Keep this context live: ${ctx.recentNotes[0]}.`);
+  }
+
+  return lines.join("\n");
+}
+
+function buildRecoveryPlanReply(ctx: AIContext) {
+  const urgent = ctx.tasks?.urgent ?? 0;
+  const overdue = ctx.tasks?.overdue ?? 0;
+  const inProgress = ctx.tasks?.inProgress ?? 0;
+  const remainingHabits = Math.max(
+    (ctx.habits?.total ?? 0) - (ctx.habits?.completedToday ?? 0),
+    0,
+  );
+  const steps: string[] = ["Here is your recovery plan:"];
+
+  if (urgent > 0 || overdue > 0) {
+    steps.push(
+      `1. Stabilize the board: resolve or re-sequence the ${urgent} urgent and ${overdue} overdue item${urgent + overdue === 1 ? "" : "s"} first.`,
+    );
+  }
+
+  if (inProgress > 0) {
+    steps.push(
+      `2. Collapse active work: finish one of the ${inProgress} in-progress tasks before touching anything new.`,
+    );
+  } else if ((ctx.tasks?.pending ?? 0) > 0) {
+    steps.push(
+      `2. Reduce scope: pick one pending task to finish today and deliberately leave the rest parked.`,
+    );
+  }
+
+  if (remainingHabits > 0) {
+    steps.push(
+      `3. Keep the floor intact: complete the remaining ${remainingHabits} habit${remainingHabits === 1 ? "" : "s"} so the reset is not purely reactive.`,
+    );
+  }
+
+  if ((ctx.money?.balance ?? 0) < 0) {
+    steps.push(
+      `4. Protect cash: avoid discretionary spend until you recover the current ${formatMoneyAmount(Math.abs(ctx.money?.balance ?? 0), ctx.money?.currency ?? "KES")} monthly deficit.`,
+    );
+  }
+
+  if (steps.length === 1) {
+    return "Your system does not need a rescue plan right now. Run a morning brief instead and keep execution tight.";
+  }
+
+  return steps.join("\n");
+}
+
+function buildWeeklyResetReply(ctx: AIContext) {
+  const topGoal = ctx.goals?.recent?.[0];
+  const largestExpense = pickLargestExpense(ctx.money?.recent);
+  const lines = ["Here is your weekly reset:"];
+
+  lines.push(
+    `1. Clean the board: review pending work, cancel stale items, and make sure the next week starts with only real commitments.${(ctx.tasks?.pending ?? 0) > 0 ? ` You are carrying ${ctx.tasks?.pending ?? 0} pending tasks right now.` : ""}`,
+  );
+
+  if (topGoal) {
+    lines.push(
+      `2. Re-anchor goals: decide the one concrete move that advances **${topGoal.title}** beyond its current ${topGoal.progress}% progress.`,
+    );
+  }
+
+  if ((ctx.habits?.total ?? 0) > 0) {
+    lines.push(
+      `3. Reset habit expectations: ${ctx.habits?.completedToday ?? 0}/${ctx.habits?.total ?? 0} are done today, so set a clean baseline for the next seven days instead of chasing perfect streaks.`,
+    );
+  }
+
+  if (ctx.money) {
+    lines.push(
+      `4. Review money pressure: month-to-date balance is ${formatMoneyAmount(ctx.money.balance, ctx.money.currency)}${largestExpense ? `, with ${largestExpense.category} as the biggest recent expense lane` : ""}.`,
+    );
+  }
+
+  if (ctx.recentNotes?.length) {
+    lines.push(
+      `5. Read back the latest notes and decisions so next week inherits context instead of starting cold.`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
+function isAutomationRequest(message: string) {
+  return /automation|autopilot|morning brief|daily brief|briefing|recovery plan|rescue plan|weekly reset|weekly review|operating brief|run my brief|run my reset|system reset/i.test(
+    message,
+  );
+}
+
+function buildAutomationReply(message: string, ctx: AIContext) {
+  const normalized = message.toLowerCase();
+
+  if (/recovery plan|rescue plan/.test(normalized)) {
+    return buildRecoveryPlanReply(ctx);
+  }
+
+  if (/weekly reset|weekly review|system reset/.test(normalized)) {
+    return buildWeeklyResetReply(ctx);
+  }
+
+  return buildMorningBriefReply(ctx);
+}
+
 function buildMoneyReply(ctx: AIContext) {
   if (!ctx.money) {
     return "I do not have money context yet. Try logging a few transactions and I can summarize your spending pattern.";
@@ -877,7 +1033,9 @@ export function shouldUseLocalFastPath(messages: AIMessage[]) {
   const latestUserMessage = getLatestUserMessage(messages)?.trim() ?? "";
   if (!latestUserMessage) return true;
 
-  return Boolean(inferAction(latestUserMessage));
+  return Boolean(
+    inferAction(latestUserMessage) || isAutomationRequest(latestUserMessage),
+  );
 }
 
 function buildActionReply(action: Record<string, unknown>, currency = "KES") {
@@ -952,6 +1110,10 @@ export async function localChat(
     return { content: buildMemoryRecallReply(ctx) };
   }
 
+  if (isAutomationRequest(normalized)) {
+    return { content: buildAutomationReply(latestUserMessage, ctx) };
+  }
+
   if (/summari[sz]e|my day|daily snapshot|daily summary/.test(normalized)) {
     return { content: buildSummaryReply(ctx) };
   }
@@ -982,7 +1144,7 @@ export async function localChat(
 
   return {
     content:
-      "I can advise, plan, summarize, search the web with sources, and record real actions. Try `look up the latest budgeting apps`, `I got KSh 1,000 from Ali`, `summarize my day`, or `add task: review budget`.",
+      "I can advise, run automation briefs, plan, search the web with sources, and record real actions. Try `run my morning brief`, `build a recovery plan`, `look up the latest budgeting apps`, or `add task: review budget`.",
   };
 }
 
@@ -1033,6 +1195,7 @@ Behavior:
 - Lead with the best answer or recommendation, not warm-up filler.
 - Ground advice in the user's real context whenever possible: mention task titles, goal names, money pressure, note themes, or habits.
 - Use retrieved long-term memory from past chats and notes when it is relevant, but do not overclaim if the memory is weak or ambiguous.
+- For automation prompts like morning brief, recovery plan, or weekly reset, return a compact operating brief with clear sequencing and risk signals.
 - If current web research is provided, use it and stay grounded in it.
 - Never pretend to have current information unless web research was supplied.
 - Ask one clarifying question only when it prevents a wrong answer.

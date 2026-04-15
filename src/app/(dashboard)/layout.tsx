@@ -43,7 +43,7 @@ export default async function DashboardLayout({
       <div className="pointer-events-none absolute inset-0 opacity-[0.04] [background-image:linear-gradient(rgba(255,255,255,0.8)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.8)_1px,transparent_1px)] [background-size:24px_24px] [mask-image:radial-gradient(circle_at_center,black,transparent_82%)]" />
 
       <div
-        className="relative mx-auto flex min-h-[100dvh] w-full max-w-[1520px] gap-3 px-3 pb-3 sm:gap-4 sm:px-4 sm:pb-4 xl:px-5"
+        className="relative mx-auto flex min-h-[100dvh] w-full max-w-[1520px] gap-2.5 px-3 pb-3 sm:gap-4 sm:px-4 sm:pb-4 xl:px-5"
         style={{
           paddingTop: "max(1rem, calc(env(safe-area-inset-top) + 0.75rem))",
         }}
@@ -57,8 +57,10 @@ export default async function DashboardLayout({
             dateLabel={dateLabel}
           />
 
-          <main className="min-w-0 flex-1 pb-28 pt-3 md:pb-6 md:pt-4">
-            <div className="mx-auto w-full max-w-[1280px]">{children}</div>
+          <main className="min-w-0 flex-1 pb-36 pt-3 md:pb-6 md:pt-4">
+            <div className="mx-auto min-w-0 w-full max-w-[1280px]">
+              {children}
+            </div>
           </main>
         </div>
       </div>

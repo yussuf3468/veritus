@@ -9,6 +9,7 @@ import {
 } from "@/lib/ai/openai";
 import { checkRateLimit, resolveCurrencyCode } from "@/lib/utils";
 import { format } from "date-fns";
+import type { AIFollowUpAction } from "@/types";
 
 type AIHistoryRow = {
   id: string;
@@ -276,7 +277,246 @@ function mapStoredHistoryToMessages(rows: AIHistoryRow[]) {
               createdAt: string;
             }>)
           : undefined,
+      followUps:
+        row.role === "assistant" &&
+        row.metadata &&
+        typeof row.metadata === "object" &&
+        Array.isArray(row.metadata.followUps)
+          ? (row.metadata.followUps as AIFollowUpAction[])
+          : undefined,
     }));
+}
+
+function pickPrimaryTask(ctx: AIContext) {
+  return (
+    ctx.tasks?.recent?.find(
+      (task) =>
+        task.isFocus ||
+        task.priority === "urgent" ||
+        task.status === "in_progress" ||
+        task.status === "pending",
+    ) ?? ctx.tasks?.recent?.[0]
+  );
+}
+
+function buildNotificationProgramAction({
+  id,
+  label,
+  name,
+  prompt,
+  description,
+  scheduleType,
+  scheduleTime,
+  weekdays = [],
+  style = "warning",
+}: {
+  id: string;
+  label: string;
+  name: string;
+  prompt: string;
+  description: string;
+  scheduleType: "once" | "daily" | "weekly";
+  scheduleTime: string;
+  weekdays?: number[];
+  style?: "primary" | "secondary" | "warning";
+}): AIFollowUpAction {
+  return {
+    id,
+    label,
+    kind: "api",
+    endpoint: "/api/notification-programs",
+    method: "POST",
+    payload: {
+      name,
+      prompt,
+      description,
+      delivery_mode: "immersive",
+      schedule_type: scheduleType,
+      schedule_time: scheduleTime,
+      weekdays,
+      is_enabled: true,
+      full_screen_intent: true,
+    },
+    successMessage:
+      "Alert program created. Open the native iPhone app and sync alerts after logging in on the Command Center tab.",
+    style,
+  };
+}
+
+function buildFollowUpActions({
+  latestUserMessage,
+  ctx,
+  today,
+}: {
+  latestUserMessage: string;
+  ctx: AIContext;
+  today: string;
+}): AIFollowUpAction[] {
+  const normalized = latestUserMessage.toLowerCase();
+  const primaryTask = pickPrimaryTask(ctx);
+
+  if (/recovery plan|rescue plan/.test(normalized)) {
+    return [
+      {
+        id: "create-recovery-task",
+        label: "Create recovery sprint",
+        kind: "api",
+        endpoint: "/api/tasks",
+        method: "POST",
+        payload: {
+          title: primaryTask
+            ? `Recovery sprint: ${primaryTask.title}`
+            : "Recovery sprint: clear urgent and overdue work",
+          description:
+            "Generated from Veritus AI to compress pressure into one smaller, winnable lane.",
+          priority: "urgent",
+          status: "pending",
+          is_focus: true,
+          ai_suggested: true,
+          tags: ["automation", "recovery-plan"],
+          due_date: null,
+        },
+        successMessage: "Recovery sprint added to your task board.",
+        style: "primary",
+      },
+      buildNotificationProgramAction({
+        id: "arm-recovery-alert",
+        label: "Arm immersive rescue alert",
+        name: "Recovery Plan Alert",
+        prompt: "Build a recovery plan for my overdue and urgent work.",
+        description:
+          "Time-sensitive immersive alert for pressure spikes and backlog recovery.",
+        scheduleType: "daily",
+        scheduleTime: "08:30",
+      }),
+      {
+        id: "open-tasks",
+        label: "Open tasks board",
+        kind: "link",
+        href: "/dashboard/tasks",
+        style: "secondary",
+      },
+    ];
+  }
+
+  if (/weekly reset|weekly review|system reset/.test(normalized)) {
+    return [
+      {
+        id: "create-weekly-reset-note",
+        label: "Create weekly reset note",
+        kind: "api",
+        endpoint: "/api/notes",
+        method: "POST",
+        payload: {
+          title: `Weekly reset - ${today}`,
+          content:
+            "1. Cancel stale tasks\n2. Re-anchor the top goal\n3. Reset habit expectations\n4. Review money pressure\n5. Capture next-week decisions",
+          tags: ["automation", "weekly-reset"],
+          is_pinned: true,
+        },
+        successMessage: "Weekly reset note pinned to Notes.",
+        style: "primary",
+      },
+      buildNotificationProgramAction({
+        id: "arm-weekly-reset",
+        label: "Arm Sunday reset alert",
+        name: "Weekly Reset Alert",
+        prompt:
+          "Run my weekly reset across tasks, money, habits, goals, and notes.",
+        description:
+          "Weekly immersive alert that re-anchors the entire system before the next week starts.",
+        scheduleType: "weekly",
+        scheduleTime: "18:00",
+        weekdays: [1],
+      }),
+      {
+        id: "open-goals",
+        label: "Open goals",
+        kind: "link",
+        href: "/dashboard/goals",
+        style: "secondary",
+      },
+    ];
+  }
+
+  if (/finance watch/.test(normalized)) {
+    return [
+      buildNotificationProgramAction({
+        id: "arm-finance-watch",
+        label: "Arm finance watch alert",
+        name: "Finance Watch Alert",
+        prompt: "Give me an automation finance watch and next moves.",
+        description:
+          "Evening immersive alert that pushes a monthly money signal and next move to the phone.",
+        scheduleType: "daily",
+        scheduleTime: "18:30",
+      }),
+      {
+        id: "open-money",
+        label: "Open money",
+        kind: "link",
+        href: "/dashboard/money",
+        style: "secondary",
+      },
+      {
+        id: "prefill-budget-check",
+        label: "Ask for a tighter budget plan",
+        kind: "prefill",
+        prompt: "Give me a tighter spending plan for the rest of this month.",
+        style: "primary",
+      },
+    ];
+  }
+
+  if (
+    /automation|autopilot|morning brief|daily brief|briefing|operating brief|run my brief/.test(
+      normalized,
+    )
+  ) {
+    return [
+      {
+        id: "create-focus-block",
+        label: "Create focus block",
+        kind: "api",
+        endpoint: "/api/tasks",
+        method: "POST",
+        payload: {
+          title: primaryTask
+            ? `Focus block: ${primaryTask.title}`
+            : "Focus block: primary move",
+          description:
+            "Generated from Veritus AI morning brief to lock the first decisive block of work.",
+          priority: primaryTask?.priority ?? "high",
+          status: "pending",
+          is_focus: true,
+          ai_suggested: true,
+          tags: ["automation", "morning-brief"],
+          due_date: null,
+        },
+        successMessage: "Focus block created in Tasks.",
+        style: "primary",
+      },
+      buildNotificationProgramAction({
+        id: "arm-morning-alert",
+        label: "Arm immersive morning alert",
+        name: "Morning Brief Alert",
+        prompt: "Run my morning brief across tasks, money, habits, and goals.",
+        description:
+          "Daily immersive alert that launches your morning operating brief on iPhone.",
+        scheduleType: "daily",
+        scheduleTime: "07:00",
+      }),
+      {
+        id: "open-focus-board",
+        label: "Open focus tasks",
+        kind: "link",
+        href: "/dashboard/tasks?focus=true",
+        style: "secondary",
+      },
+    ];
+  }
+
+  return [];
 }
 
 async function getAuthenticatedUser() {
@@ -520,6 +760,11 @@ export async function POST(request: NextRequest) {
 
   let { content, action, sources } = aiResponse;
   const memories = ctx.memories?.slice(0, 3) ?? [];
+  const followUps = buildFollowUpActions({
+    latestUserMessage,
+    ctx,
+    today,
+  });
 
   const lastUserMsg = parse.data.messages.at(-1);
   const persistHistory = (async () => {
@@ -530,8 +775,11 @@ export async function POST(request: NextRequest) {
         role: "assistant",
         content,
         metadata:
-          action || (sources?.length ?? 0) > 0 || memories.length > 0
-            ? { action, sources, memories }
+          action ||
+          (sources?.length ?? 0) > 0 ||
+          memories.length > 0 ||
+          followUps.length > 0
+            ? { action, sources, memories, followUps }
             : null,
       },
     ]);
@@ -555,7 +803,15 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({
-    data: { content, action, actionResult, actionError, sources, memories },
+    data: {
+      content,
+      action,
+      actionResult,
+      actionError,
+      sources,
+      memories,
+      followUps,
+    },
   });
 }
 

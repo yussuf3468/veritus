@@ -1,0 +1,329 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		4A1A00010000000000000101 /* VeritusNativeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A00010000000000000201 /* VeritusNativeApp.swift */; };
+		4A1A00010000000000000102 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A00010000000000000202 /* AppState.swift */; };
+		4A1A00010000000000000103 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A00010000000000000203 /* AppDelegate.swift */; };
+		4A1A00010000000000000104 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A00010000000000000204 /* AppConfig.swift */; };
+		4A1A00010000000000000105 /* NotificationProgram.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A00010000000000000205 /* NotificationProgram.swift */; };
+		4A1A00010000000000000106 /* ImmersiveAlert.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A00010000000000000206 /* ImmersiveAlert.swift */; };
+		4A1A00010000000000000107 /* NotificationProgramService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A00010000000000000207 /* NotificationProgramService.swift */; };
+		4A1A00010000000000000108 /* ImmersiveAlertScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A00010000000000000208 /* ImmersiveAlertScheduler.swift */; };
+		4A1A00010000000000000109 /* CommandCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A00010000000000000209 /* CommandCenterView.swift */; };
+		4A1A0001000000000000010A /* AlertProgramsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A0001000000000000020A /* AlertProgramsView.swift */; };
+		4A1A0001000000000000010B /* ImmersiveAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A0001000000000000020B /* ImmersiveAlertView.swift */; };
+		4A1A0001000000000000010C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4A1A0001000000000000020C /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		4A1A00010000000000000201 /* VeritusNativeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VeritusNativeApp.swift; sourceTree = "<group>"; };
+		4A1A00010000000000000202 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		4A1A00010000000000000203 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		4A1A00010000000000000204 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		4A1A00010000000000000205 /* NotificationProgram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationProgram.swift; sourceTree = "<group>"; };
+		4A1A00010000000000000206 /* ImmersiveAlert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImmersiveAlert.swift; sourceTree = "<group>"; };
+		4A1A00010000000000000207 /* NotificationProgramService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationProgramService.swift; sourceTree = "<group>"; };
+		4A1A00010000000000000208 /* ImmersiveAlertScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImmersiveAlertScheduler.swift; sourceTree = "<group>"; };
+		4A1A00010000000000000209 /* CommandCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandCenterView.swift; sourceTree = "<group>"; };
+		4A1A0001000000000000020A /* AlertProgramsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertProgramsView.swift; sourceTree = "<group>"; };
+		4A1A0001000000000000020B /* ImmersiveAlertView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImmersiveAlertView.swift; sourceTree = "<group>"; };
+		4A1A0001000000000000020C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		4A1A0001000000000000020D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		4A1A0001000000000000020E /* VeritusNative.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VeritusNative.entitlements; sourceTree = "<group>"; };
+		4A1A0001000000000000020F /* VeritusNative.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VeritusNative.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		4A1A00010000000000000301 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		4A1A00010000000000000401 = {
+			isa = PBXGroup;
+			children = (
+				4A1A00010000000000000403 /* VeritusNative */,
+				4A1A00010000000000000402 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		4A1A00010000000000000402 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4A1A0001000000000000020F /* VeritusNative.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		4A1A00010000000000000403 /* VeritusNative */ = {
+			isa = PBXGroup;
+			children = (
+				4A1A00010000000000000201 /* VeritusNativeApp.swift */,
+				4A1A00010000000000000202 /* AppState.swift */,
+				4A1A00010000000000000203 /* AppDelegate.swift */,
+				4A1A00010000000000000404 /* Config */,
+				4A1A00010000000000000405 /* Models */,
+				4A1A00010000000000000406 /* Services */,
+				4A1A00010000000000000407 /* Views */,
+				4A1A0001000000000000020C /* Assets.xcassets */,
+				4A1A0001000000000000020D /* Info.plist */,
+				4A1A0001000000000000020E /* VeritusNative.entitlements */,
+			);
+			path = VeritusNative;
+			sourceTree = "<group>";
+		};
+		4A1A00010000000000000404 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				4A1A00010000000000000204 /* AppConfig.swift */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		4A1A00010000000000000405 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				4A1A00010000000000000205 /* NotificationProgram.swift */,
+				4A1A00010000000000000206 /* ImmersiveAlert.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		4A1A00010000000000000406 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				4A1A00010000000000000207 /* NotificationProgramService.swift */,
+				4A1A00010000000000000208 /* ImmersiveAlertScheduler.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		4A1A00010000000000000407 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				4A1A00010000000000000209 /* CommandCenterView.swift */,
+				4A1A0001000000000000020A /* AlertProgramsView.swift */,
+				4A1A0001000000000000020B /* ImmersiveAlertView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		4A1A00010000000000000501 /* VeritusNative */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4A1A00010000000000000901 /* Build configuration list for PBXNativeTarget "VeritusNative" */;
+			buildPhases = (
+				4A1A00010000000000000702 /* Sources */,
+				4A1A00010000000000000301 /* Frameworks */,
+				4A1A00010000000000000701 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VeritusNative;
+			productName = VeritusNative;
+			productReference = 4A1A0001000000000000020F /* VeritusNative.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		4A1A00010000000000000601 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				ORGANIZATIONNAME = Veritus;
+				TargetAttributes = {
+					4A1A00010000000000000501 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = 4A1A00010000000000000902 /* Build configuration list for PBXProject "VeritusNative" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 4A1A00010000000000000401;
+			productRefGroup = 4A1A00010000000000000402 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				4A1A00010000000000000501 /* VeritusNative */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		4A1A00010000000000000701 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4A1A0001000000000000010C /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		4A1A00010000000000000702 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4A1A00010000000000000103 /* AppDelegate.swift in Sources */,
+				4A1A00010000000000000107 /* NotificationProgramService.swift in Sources */,
+				4A1A00010000000000000106 /* ImmersiveAlert.swift in Sources */,
+				4A1A0001000000000000010B /* ImmersiveAlertView.swift in Sources */,
+				4A1A0001000000000000010A /* AlertProgramsView.swift in Sources */,
+				4A1A00010000000000000108 /* ImmersiveAlertScheduler.swift in Sources */,
+				4A1A00010000000000000104 /* AppConfig.swift in Sources */,
+				4A1A00010000000000000105 /* NotificationProgram.swift in Sources */,
+				4A1A00010000000000000109 /* CommandCenterView.swift in Sources */,
+				4A1A00010000000000000102 /* AppState.swift in Sources */,
+				4A1A00010000000000000101 /* VeritusNativeApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		4A1A00010000000000000801 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = VeritusNative/VeritusNative.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VeritusNative/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.veritus.native;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		4A1A00010000000000000802 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = VeritusNative/VeritusNative.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VeritusNative/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.veritus.native;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		4A1A00010000000000000803 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+			};
+			name = Debug;
+		};
+		4A1A00010000000000000804 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4A1A00010000000000000901 /* Build configuration list for PBXNativeTarget "VeritusNative" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4A1A00010000000000000801 /* Debug */,
+				4A1A00010000000000000802 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4A1A00010000000000000902 /* Build configuration list for PBXProject "VeritusNative" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4A1A00010000000000000803 /* Debug */,
+				4A1A00010000000000000804 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 4A1A00010000000000000601 /* Project object */;
+}
