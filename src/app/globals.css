@@ -118,6 +118,7 @@ body {
   .prose-veritus {
     color: var(--text-primary);
     line-height: 1.75;
+    overflow-wrap: anywhere;
   }
   .prose-veritus h1,
   .prose-veritus h2,
@@ -143,9 +144,14 @@ body {
     padding: 1rem;
     overflow-x: auto;
   }
+  .prose-veritus img {
+    height: auto;
+    max-width: 100%;
+  }
   .prose-veritus a {
     color: var(--brand-cyan);
     text-decoration: underline;
+    word-break: break-word;
   }
   .prose-veritus hr {
     border-color: var(--border);
@@ -162,6 +168,19 @@ body {
   }
   .prose-veritus li {
     margin: 0.25rem 0;
+  }
+  .prose-veritus table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+  }
+  .prose-veritus th,
+  .prose-veritus td {
+    border: 1px solid var(--border);
+    padding: 0.625rem 0.75rem;
+    text-align: left;
+    white-space: nowrap;
   }
 }
 

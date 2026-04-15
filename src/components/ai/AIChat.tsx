@@ -303,6 +303,36 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
     [messages],
   );
 
+  const radarItems = [
+    {
+      label: "Messages",
+      value: String(sessionStats.messages),
+      detail: "conversation turns",
+    },
+    {
+      label: "Memories",
+      value: String(sessionStats.memories),
+      detail: "retrieval hits",
+    },
+    {
+      label: "Sources",
+      value: String(sessionStats.sources),
+      detail: "citations surfaced",
+    },
+    {
+      label: "Actions",
+      value: String(sessionStats.actions),
+      detail: "workspace writes suggested",
+    },
+  ];
+
+  const shortcutItems = [
+    "Ctrl/Cmd+K focuses the composer.",
+    "Ctrl/Cmd+Enter sends the current draft.",
+    "Ctrl/Cmd+1-4 loads the command lanes.",
+    "Ctrl/Cmd+Shift+P pins the current draft.",
+  ];
+
   const resizeComposer = useCallback((element?: HTMLTextAreaElement | null) => {
     if (!element) return;
     element.style.height = "24px";
@@ -837,7 +867,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
             isPage ? "p-4 sm:p-5" : "p-4",
           )}
         >
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div className="max-w-2xl">
               <div className="inline-flex items-center gap-2 rounded-full border border-brand-cyan/20 bg-brand-cyan/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-brand-cyan">
                 <Sparkles size={11} />
@@ -855,7 +885,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
               </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 lg:w-[360px]">
+            <div className="grid grid-cols-3 gap-2 xl:w-[340px]">
               {[
                 {
                   label: "Session",
@@ -915,15 +945,15 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
 
             <div
               className={cn(
-                "space-y-2",
+                "min-w-0 space-y-2",
                 isPage
-                  ? "max-w-[calc(100%-2.5rem)] sm:max-w-[92%] lg:max-w-[84%]"
+                  ? "max-w-[calc(100%-2.5rem)] sm:max-w-[94%] 2xl:max-w-[84%]"
                   : "max-w-[88%]",
               )}
             >
               <div
                 className={cn(
-                  "break-words rounded-[20px] px-4 py-3 text-[13px] leading-[1.8] prose-veritus [&_p]:m-0",
+                  "overflow-hidden break-words rounded-[20px] px-4 py-3 text-[13px] leading-[1.8] prose-veritus [&_p]:m-0",
                   message.role === "user"
                     ? "rounded-tr-[6px] border border-brand-cyan/22 bg-gradient-to-br from-brand-cyan/18 via-brand-cyan/10 to-brand-purple/12 text-white shadow-[0_14px_32px_rgba(0,212,255,0.08)]"
                     : "rounded-tl-[6px] border border-white/7 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.03))] text-slate-200 shadow-[0_16px_36px_rgba(0,0,0,0.18)]",
@@ -986,7 +1016,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                     {message.memories.map((memory, index) => (
                       <div
                         key={`${message.id}-memory-${index}-${memory.createdAt}`}
-                        className="max-w-[260px] rounded-[16px] border border-white/[0.06] bg-white/[0.03] px-3 py-2.5"
+                        className="w-full max-w-full rounded-[16px] border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 sm:max-w-[260px]"
                       >
                         <div className="flex items-center gap-2">
                           <span
@@ -1082,17 +1112,208 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
     </div>
   );
 
+  const mobileIntelDeck = (
+    <div className="space-y-2 xl:hidden">
+      <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
+        <Sparkles size={11} className="text-brand-cyan/70" />
+        Live Intelligence
+      </div>
+
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 pl-0.5 pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <section className="w-[84vw] max-w-[360px] snap-start rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+          <div className="flex items-center gap-2 text-white">
+            <Bot size={15} className="text-brand-cyan" />
+            <p className="text-sm font-semibold">Session Radar</p>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            {radarItems.map((item) => (
+              <div
+                key={item.label}
+                className="rounded-[18px] border border-white/8 bg-black/20 px-3 py-3"
+              >
+                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                  {item.label}
+                </div>
+                <div className="mt-2 text-lg font-semibold text-white">
+                  {item.value}
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">
+                  {item.detail}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="w-[84vw] max-w-[360px] snap-start rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+          <div className="flex items-center gap-2 text-white">
+            <FileText size={15} className="text-amber-300" />
+            <p className="text-sm font-semibold">Latest Recall</p>
+          </div>
+          <div className="mt-4 space-y-2">
+            {latestMemories.length > 0 ? (
+              latestMemories.slice(0, 2).map((memory, index) => (
+                <div
+                  key={`${memory.createdAt}-${index}`}
+                  className="rounded-[18px] border border-white/8 bg-white/[0.03] px-3.5 py-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span
+                      className={cn(
+                        "rounded-full border px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.12em]",
+                        memory.source === "note"
+                          ? "border-amber-400/20 bg-amber-400/10 text-amber-200"
+                          : "border-brand-cyan/20 bg-brand-cyan/10 text-brand-cyan",
+                      )}
+                    >
+                      {memory.source}
+                    </span>
+                    <span className="text-[10px] uppercase tracking-[0.12em] text-slate-600">
+                      {formatMemoryDate(memory.createdAt)}
+                    </span>
+                  </div>
+                  {memory.title && (
+                    <div className="mt-2 text-sm font-medium text-white">
+                      {memory.title}
+                    </div>
+                  )}
+                  <div className="mt-1 text-[12px] leading-6 text-slate-400">
+                    {formatMemoryPreview(memory.content, 120)}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-[18px] border border-dashed border-white/8 bg-white/[0.02] px-3.5 py-4 text-sm leading-6 text-slate-500">
+                No recalled memory yet. Ask about a past decision or note to
+                light this panel up.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="w-[84vw] max-w-[360px] snap-start rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+          <div className="flex items-center gap-2 text-white">
+            <Globe size={15} className="text-brand-cyan" />
+            <p className="text-sm font-semibold">Research Deck</p>
+          </div>
+          <div className="mt-4 space-y-2">
+            {latestSources.length > 0 ? (
+              latestSources.slice(0, 2).map((source) => (
+                <a
+                  key={source.url}
+                  href={source.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block rounded-[18px] border border-white/8 bg-white/[0.03] px-3.5 py-3 transition-all hover:border-brand-cyan/20 hover:bg-brand-cyan/10"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-white">
+                        {source.title}
+                      </div>
+                      <div className="mt-1 text-[12px] leading-6 text-slate-500">
+                        {source.snippet}
+                      </div>
+                    </div>
+                    <div className="rounded-full border border-white/8 bg-black/20 px-2 py-1 text-[9px] uppercase tracking-[0.12em] text-slate-500">
+                      {source.provider}
+                    </div>
+                  </div>
+                </a>
+              ))
+            ) : (
+              <div className="rounded-[18px] border border-dashed border-white/8 bg-white/[0.02] px-3.5 py-4 text-sm leading-6 text-slate-500">
+                Web citations will appear here when the latest reply depends on
+                current information.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="w-[84vw] max-w-[360px] snap-start rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+          <div className="flex items-center gap-2 text-white">
+            <Command size={15} className="text-fuchsia-300" />
+            <p className="text-sm font-semibold">Shortcut Deck</p>
+          </div>
+          <div className="mt-4 space-y-2">
+            {shortcutItems.map((item) => (
+              <div
+                key={item}
+                className="rounded-[18px] border border-white/8 bg-white/[0.03] px-3.5 py-3 text-sm leading-6 text-slate-300"
+              >
+                {item}
+              </div>
+            ))}
+            {latestActionBadges.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {latestActionBadges.map((badge) => (
+                  <span
+                    key={badge}
+                    className="rounded-full border border-fuchsia-400/18 bg-fuchsia-400/10 px-3 py-1 text-[11px] text-fuchsia-100"
+                  >
+                    {badge}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+
+  const quickLaneDock = (
+    <div className="space-y-2 xl:hidden">
+      <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
+        <Sparkles size={11} className="text-brand-cyan/70" />
+        Quick Lanes
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[430px]:grid min-[430px]:grid-cols-2 min-[430px]:overflow-visible min-[430px]:pb-0">
+        {PRIMARY_AI_COMMANDS.map(({ label, prompt, Icon, tone }) => (
+          <button
+            key={`quick-${label}`}
+            onClick={() => prefillPrompt(prompt)}
+            className={cn(
+              "inline-flex min-h-[52px] min-w-[152px] items-center gap-2 rounded-[18px] border px-3 py-3 text-left text-sm font-medium transition-all hover:-translate-y-0.5 hover:border-white/16 min-[430px]:min-w-0",
+              tone,
+            )}
+          >
+            <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/20 text-white/80">
+              <Icon size={15} />
+            </span>
+            <span className="leading-5 text-white">{label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
   const composer = (
-    <div className="border-t border-white/7 bg-[linear-gradient(180deg,rgba(10,12,20,0.82),rgba(8,9,16,0.94))] px-3 pb-3 pt-3 sm:px-5 sm:pb-4">
+    <div
+      className={cn(
+        "border-t border-white/7 bg-[linear-gradient(180deg,rgba(10,12,20,0.82),rgba(8,9,16,0.94))] px-3 pb-3 pt-3 sm:px-4 sm:pb-4 xl:px-5",
+        isPage && "sticky bottom-0 z-10 backdrop-blur-xl",
+      )}
+      style={
+        isPage
+          ? {
+              paddingBottom:
+                "max(0.9rem, calc(env(safe-area-inset-bottom) + 0.9rem))",
+            }
+          : undefined
+      }
+    >
       <div className="space-y-3">
         {pinnedPromptStrip}
+        {quickLaneDock}
 
         <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">
           <div className="flex items-center gap-2">
             <Command size={11} className="text-brand-cyan/70" />
             Keyboard Deck
           </div>
-          <div className="hidden items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex">
+          <div className="hidden items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex">
             <span className="rounded-full border border-white/8 bg-white/[0.03] px-2 py-1 text-[9px] text-slate-400">
               Ctrl/Cmd+K focus
             </span>
@@ -1113,7 +1334,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
               : "border-white/8",
           )}
         >
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end">
             <textarea
               ref={inputRef}
               value={input}
@@ -1131,7 +1352,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                   ? "Ask Veritus AI to decide, recall, research, or act..."
                   : "Ask Veritus AI anything..."
               }
-              className="min-h-[72px] w-full flex-1 resize-none bg-transparent text-sm leading-6 text-white placeholder:text-slate-500 focus:outline-none sm:min-h-[24px]"
+              className="min-h-[88px] w-full flex-1 resize-none bg-transparent text-sm leading-6 text-white placeholder:text-slate-500 focus:outline-none md:min-h-[24px]"
               rows={1}
             />
 
@@ -1140,7 +1361,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                 onClick={() => togglePinnedPrompt(input)}
                 disabled={!input.trim()}
                 className={cn(
-                  "rounded-2xl border p-2 text-slate-400 transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                  "inline-flex h-12 w-12 items-center justify-center rounded-2xl border text-slate-400 transition-colors disabled:cursor-not-allowed disabled:opacity-40",
                   draftIsPinned
                     ? "border-brand-cyan/24 bg-brand-cyan/10 text-brand-cyan"
                     : "border-white/8 bg-white/[0.03] hover:border-white/14 hover:text-white",
@@ -1158,7 +1379,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
               <button
                 onClick={() => void send()}
                 disabled={loading || !input.trim()}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-cyan to-brand-purple text-white shadow-[0_16px_34px_rgba(0,212,255,0.2)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-cyan to-brand-purple text-white shadow-[0_16px_34px_rgba(0,212,255,0.2)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label="Send message"
               >
                 {loading ? (
@@ -1193,10 +1414,10 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
         <div className="pointer-events-none absolute -left-10 top-10 h-48 w-48 rounded-full bg-brand-cyan/10 blur-3xl ai-orb-drift-cyan" />
         <div className="pointer-events-none absolute bottom-10 right-6 h-52 w-52 rounded-full bg-brand-purple/10 blur-3xl ai-orb-drift-purple" />
 
-        <div className="relative grid gap-3 p-3 sm:gap-4 sm:p-4 lg:min-h-[760px] lg:grid-cols-[minmax(0,1fr)_320px]">
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,18,34,0.94),rgba(9,11,22,0.92))] shadow-[0_18px_48px_rgba(0,0,0,0.24)] sm:rounded-[28px]">
+        <div className="relative grid gap-3 p-3 sm:gap-4 sm:p-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,312px)] 2xl:grid-cols-[minmax(0,1fr)_336px]">
+          <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,18,34,0.94),rgba(9,11,22,0.92))] shadow-[0_18px_48px_rgba(0,0,0,0.24)] sm:rounded-[28px] xl:min-h-[780px]">
             <div className="border-b border-white/6 px-3.5 py-3.5 sm:px-5 sm:py-4">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                 <div>
                   <div className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400">
                     Thread Stage
@@ -1212,10 +1433,10 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                   </p>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
+                <div className="grid w-full grid-cols-2 gap-2 min-[430px]:grid-cols-4 xl:w-auto">
                   <button
                     onClick={() => void clearChat()}
-                    className="inline-flex items-center gap-2 rounded-[16px] border border-white/8 bg-white/[0.03] px-3 py-2 text-[11px] text-slate-300 transition-colors hover:border-white/14 hover:bg-white/[0.05] hover:text-white"
+                    className="col-span-2 inline-flex items-center justify-center gap-2 rounded-[16px] border border-white/8 bg-white/[0.03] px-3 py-2.5 text-[11px] text-slate-300 transition-colors hover:border-white/14 hover:bg-white/[0.05] hover:text-white min-[430px]:col-span-1"
                   >
                     <Trash2 size={12} />
                     Clear memory
@@ -1230,7 +1451,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                   ].map((item) => (
                     <div
                       key={item.label}
-                      className="rounded-[16px] border border-white/8 bg-black/20 px-3 py-2.5"
+                      className="rounded-[16px] border border-white/8 bg-black/20 px-3 py-2.5 text-center"
                     >
                       <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
                         {item.label}
@@ -1243,14 +1464,14 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                 </div>
               </div>
 
-              <div className="mt-4 flex gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-2 md:overflow-visible md:pb-0 xl:grid-cols-2">
+              <div className="mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[430px]:grid min-[430px]:grid-cols-2 min-[430px]:overflow-visible min-[430px]:pb-0 2xl:grid-cols-4">
                 {PRIMARY_AI_COMMANDS.map(
                   ({ label, hint, description, prompt, Icon, tone }, index) => (
                     <button
                       key={label}
                       onClick={() => prefillPrompt(prompt)}
                       className={cn(
-                        "group min-w-[260px] snap-start rounded-[18px] border p-4 text-left transition-all hover:-translate-y-0.5 hover:border-white/16 md:min-w-0 md:rounded-[20px]",
+                        "group min-w-[260px] snap-start rounded-[18px] border p-4 text-left transition-all hover:-translate-y-0.5 hover:border-white/16 min-[430px]:min-w-0 sm:rounded-[20px]",
                         tone,
                       )}
                     >
@@ -1283,18 +1504,20 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                 )}
               </div>
 
-              <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:overflow-visible md:pb-0">
+              <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[430px]:flex-wrap min-[430px]:overflow-visible min-[430px]:pb-0">
                 {SUGGESTION_ITEMS.slice(0, 6).map(({ text, Icon }) => (
                   <button
                     key={text}
                     onClick={() => handlePromptTrigger(text)}
-                    className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-[11px] text-slate-300 transition-colors hover:border-brand-cyan/20 hover:bg-brand-cyan/10 hover:text-white md:shrink md:whitespace-normal"
+                    className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-[11px] text-slate-300 transition-colors hover:border-brand-cyan/20 hover:bg-brand-cyan/10 hover:text-white min-[430px]:shrink min-[430px]:whitespace-normal"
                   >
                     <Icon size={11} className="text-brand-cyan/70" />
                     {text}
                   </button>
                 ))}
               </div>
+
+              {mobileIntelDeck}
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-3.5 py-3.5 [scrollbar-color:rgba(255,255,255,0.07)_transparent] [scrollbar-width:thin] sm:px-5 sm:py-4">
@@ -1304,35 +1527,14 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
             {composer}
           </section>
 
-          <aside className="grid min-h-0 gap-3 md:grid-cols-2 lg:grid-cols-1 lg:gap-4 lg:overflow-y-auto lg:pr-1">
+          <aside className="hidden min-h-0 min-w-0 gap-4 xl:grid xl:overflow-y-auto xl:pr-1">
             <section className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
               <div className="flex items-center gap-2 text-white">
                 <Bot size={15} className="text-brand-cyan" />
                 <p className="text-sm font-semibold">Session Radar</p>
               </div>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-                {[
-                  {
-                    label: "Messages",
-                    value: String(sessionStats.messages),
-                    detail: "conversation turns",
-                  },
-                  {
-                    label: "Memories",
-                    value: String(sessionStats.memories),
-                    detail: "retrieval hits",
-                  },
-                  {
-                    label: "Sources",
-                    value: String(sessionStats.sources),
-                    detail: "citations surfaced",
-                  },
-                  {
-                    label: "Actions",
-                    value: String(sessionStats.actions),
-                    detail: "workspace writes suggested",
-                  },
-                ].map((item) => (
+              <div className="mt-4 grid gap-2">
+                {radarItems.map((item) => (
                   <div
                     key={item.label}
                     className="rounded-[18px] border border-white/8 bg-black/20 px-3.5 py-3"
@@ -1397,7 +1599,7 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
               </div>
             </section>
 
-            <section className="hidden rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)] md:block">
+            <section className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
               <div className="flex items-center gap-2 text-white">
                 <Globe size={15} className="text-brand-cyan" />
                 <p className="text-sm font-semibold">Research Deck</p>
@@ -1436,18 +1638,13 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
               </div>
             </section>
 
-            <section className="hidden rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)] md:block">
+            <section className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,18,30,0.92),rgba(10,11,20,0.88))] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
               <div className="flex items-center gap-2 text-white">
                 <Command size={15} className="text-fuchsia-300" />
                 <p className="text-sm font-semibold">Shortcut Deck</p>
               </div>
               <div className="mt-4 space-y-2">
-                {[
-                  "Ctrl/Cmd+K focuses the composer.",
-                  "Ctrl/Cmd+Enter sends the current draft.",
-                  "Ctrl/Cmd+1-4 loads the command lanes.",
-                  "Ctrl/Cmd+Shift+P pins the current draft.",
-                ].map((item) => (
+                {shortcutItems.map((item) => (
                   <div
                     key={item}
                     className="rounded-[18px] border border-white/8 bg-white/[0.03] px-3.5 py-3 text-sm leading-6 text-slate-300"
@@ -1519,10 +1716,10 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                       </p>
                     </div>
 
-                    <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
+                    <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_44px] gap-2 sm:w-auto sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_44px]">
                       <button
                         onClick={() => void clearChat()}
-                        className="inline-flex items-center gap-1 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-[11px] text-slate-300"
+                        className="inline-flex h-11 items-center justify-center gap-1 rounded-full border border-white/8 bg-white/[0.03] px-3 text-[11px] text-slate-300"
                       >
                         <Trash2 size={11} />
                         Clear
@@ -1530,14 +1727,14 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                       <Link
                         href="/dashboard/ai"
                         onClick={() => setAIChat(false)}
-                        className="inline-flex items-center gap-1 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-[11px] text-slate-300"
+                        className="inline-flex h-11 items-center justify-center gap-1 rounded-full border border-white/8 bg-white/[0.03] px-3 text-[11px] text-slate-300"
                       >
                         Full page
                         <ArrowUpRight size={11} />
                       </Link>
                       <button
                         onClick={() => setAIChat(false)}
-                        className="rounded-2xl border border-white/10 bg-white/[0.03] p-2 text-slate-300"
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] text-slate-300"
                         aria-label="Close AI overlay"
                       >
                         <X size={16} />
@@ -1545,14 +1742,14 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                     </div>
                   </div>
 
-                  <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <div className="mt-4 flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[430px]:grid min-[430px]:grid-cols-2 min-[430px]:overflow-visible min-[430px]:pb-0">
                     {PRIMARY_AI_COMMANDS.map(
                       ({ label, hint, prompt, Icon, tone }, index) => (
                         <button
                           key={label}
                           onClick={() => prefillPrompt(prompt)}
                           className={cn(
-                            "min-w-[220px] rounded-[20px] border p-4 text-left transition-transform hover:-translate-y-0.5",
+                            "min-w-[220px] snap-start rounded-[20px] border p-4 text-left transition-transform hover:-translate-y-0.5 min-[430px]:min-w-0",
                             tone,
                           )}
                         >
@@ -1578,12 +1775,12 @@ export function AIChat({ mode = "overlay" }: AIChatProps) {
                     )}
                   </div>
 
-                  <div className="mt-3 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <div className="mt-3 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[430px]:flex-wrap min-[430px]:overflow-visible">
                     {SUGGESTION_ITEMS.slice(0, 6).map(({ text, Icon }) => (
                       <button
                         key={text}
                         onClick={() => handlePromptTrigger(text)}
-                        className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-[11px] text-slate-300"
+                        className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-[11px] text-slate-300"
                       >
                         <Icon size={11} className="text-brand-cyan/70" />
                         {text}
